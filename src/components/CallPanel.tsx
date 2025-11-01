@@ -63,12 +63,18 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 1024;
       source.connect(analyserRef.current);
-      dataArrayRef.current = new Uint8Array(analyserRef.current.frequencyBinCount);
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      const buffer = new ArrayBuffer(bufferLength);
+      dataArrayRef.current = new Uint8Array(buffer);
 
       const tick = () => {
         animationFrameRef.current = requestAnimationFrame(tick);
         if (!analyserRef.current || !dataArrayRef.current) return;
-        analyserRef.current.getByteTimeDomainData(dataArrayRef.current);
+        
+        // Type assertion to satisfy TypeScript's strict ArrayBuffer typing
+        // getByteTimeDomainData works with Uint8Array, but TS infers ArrayBufferLike type
+        analyserRef.current.getByteTimeDomainData(dataArrayRef.current as any);
+        
         // Compute RMS for amplitude 0..1
         let sum = 0;
         for (let i = 0; i < dataArrayRef.current.length; i++) {
@@ -130,7 +136,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
         await conversation.startSession({
           agentId: agentId,
           connectionType: 'webrtc',
-          user_id: projectId || 'anonymous',
+          userId: projectId || 'anonymous',
         });
       } catch (webrtcError: any) {
         console.warn('WebRTC connection failed, trying WebSocket:', webrtcError);
@@ -144,7 +150,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
           await conversation.startSession({
             agentId: agentId,
             connectionType: 'websocket',
-            user_id: projectId || 'anonymous',
+            userId: projectId || 'anonymous',
           });
         } catch (wsError) {
           console.error('WebSocket connection also failed:', wsError);

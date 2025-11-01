@@ -251,7 +251,8 @@ Current context:`;
     console.log("Parsing AI response for code actions:", response.substring(0, 500) + "...");
     
     // More flexible regex patterns - handle different formats
-    const actionRegex = /```action\s*\nTYPE:\s*(create|update|delete)\s*\nPATH:\s*(.+?)\s*\nDESCRIPTION:\s*(.+?)\s*\n```/gs;
+    // Using [\s\S] instead of . with s flag for ES2017 compatibility
+    const actionRegex = /```action\s*\nTYPE:\s*(create|update|delete)\s*\nPATH:\s*([\s\S]+?)\s*\nDESCRIPTION:\s*([\s\S]+?)\s*\n```/g;
     const codeRegex = /```(?:javascript|js|typescript|ts|python|py|java|html|css|json|xml|sql|php|go|rust|cpp|c|sh|bash|yaml|yml|markdown|md|text)?\s*\n([\s\S]*?)```/g;
     
     // Also try a simpler pattern as fallback
