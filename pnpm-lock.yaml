@@ -11,6 +11,9 @@ importers:
       '@elevenlabs/react':
         specifier: ^0.9.1
         version: 0.9.1(@types/dom-mediacapture-record@1.0.22)(react@19.2.0)
+      '@langchain/core':
+        specifier: ^1.0.2
+        version: 1.0.2(openai@6.7.0(zod@4.1.12))
       '@langchain/groq':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
