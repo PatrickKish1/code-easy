@@ -35,8 +35,35 @@ export default function Home() {
       const response = await fetch("/api/projects");
       const data = await response.json();
       if (data.projects && data.projects.length > 0) {
-        setProjects(data.projects);
-        setProject(data.projects[0]);
+        const normalized = data.projects.map((p: Project) => ({
+          ...p,
+          files: p.files || [],
+          openFilePaths: p.openFilePaths || [],
+          dirtyFiles: p.dirtyFiles || [],
+        }));
+        setProjects(normalized);
+        
+        // Load files for the first project
+        const firstProject = normalized[0];
+        try {
+          const filesResponse = await fetch(`/api/files?projectId=${firstProject.id}`);
+          const filesData = await filesResponse.json();
+          if (filesData.files) {
+            const projectWithFiles = {
+              ...firstProject,
+              files: filesData.files
+                .filter((f: any) => !f.isFolder)
+                .map((f: any) => ({ path: f.path, content: f.content || "" })),
+            };
+            setProject(projectWithFiles);
+            setProjects([projectWithFiles, ...normalized.slice(1)]);
+          } else {
+            setProject({ ...firstProject, files: [] });
+          }
+        } catch (filesError) {
+          console.error("Failed to load files:", filesError);
+          setProject({ ...firstProject, files: [] });
+        }
       } else {
         // Create default project if none exist
         const response = await fetch("/api/projects", {
@@ -46,8 +73,9 @@ export default function Home() {
         });
         const data = await response.json();
         if (data.project) {
-          setProjects([data.project]);
-          setProject(data.project);
+          const projectWithFiles = { ...data.project, files: [] };
+          setProjects([projectWithFiles]);
+          setProject(projectWithFiles);
         }
       }
     } catch (error) {
@@ -60,8 +88,14 @@ export default function Home() {
         setProject(created);
         writeProjectsToStorage([created]);
       } else {
-        setProjects(existing);
-        setProject(existing[0]);
+        const normalized = existing.map((p: Project) => ({
+          ...p,
+          files: p.files || [],
+          openFilePaths: p.openFilePaths || [],
+          dirtyFiles: p.dirtyFiles || [],
+        }));
+        setProjects(normalized);
+        setProject(normalized[0]);
       }
     }
   }
@@ -111,7 +145,7 @@ export default function Home() {
   }, [project]);
 
   const activeFile = useMemo(() => {
-    if (!project || !project.activeFilePath) return undefined;
+    if (!project || !project.activeFilePath || !project.files) return undefined;
     return project.files.find(f => f.path === project.activeFilePath);
   }, [project]);
   const openTabs = project?.openFilePaths || (project?.activeFilePath ? [project.activeFilePath] : []);
@@ -143,10 +177,11 @@ export default function Home() {
       });
       const data = await response.json();
       if (data.project) {
-        const updated = [data.project, ...projects];
+        const projectWithFiles = { ...data.project, files: [] };
+        const updated = [projectWithFiles, ...projects];
         setProjects(updated);
         writeProjectsToStorage(updated);
-        setProject(data.project);
+        setProject(projectWithFiles);
         router.push(`/${data.project.id}`);
       }
     } catch (error) {
@@ -245,7 +280,7 @@ export default function Home() {
   }
 
   function handleSave() {
-    if (!project || !project.activeFilePath) return;
+    if (!project || !project.activeFilePath || !project.files) return;
     const activeFile = project.files.find(f => f.path === project.activeFilePath);
     if (!activeFile) return;
     const next = saveFile(project, project.activeFilePath, activeFile.content);
