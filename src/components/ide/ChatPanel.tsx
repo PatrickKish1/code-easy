@@ -6,8 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, Code, FileText } from "lucide-react";
+import { Send, Code, FileText, Bot } from "lucide-react";
 import { CodeGenerationResponse } from "@/lib/ai-service";
+import { Message, MessageAvatar, MessageContent } from "@/components/ui/message";
+import Orb from "@/components/Orb";
+import { MessageRenderer } from "./MessageRenderer";
 
 interface ChatMessage {
   id: string;
@@ -161,93 +164,75 @@ export function ChatPanel({ onCodeAction, currentFile, projectFiles, selectedCod
           <div className="space-y-4 pr-2">
             {messages.length === 0 && (
               <div className="text-center text-muted-foreground py-8">
-                <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Start a conversation with the AI coding assistant</p>
-                <p className="text-sm">Ask me to generate code, fix bugs, or explain concepts</p>
+                <div className="h-12 w-12 rounded-full overflow-hidden mx-auto mb-4">
+                  <Orb hoverIntensity={0.3} rotateOnHover={false} hue={240} />
+                </div>
+                <div>
+                  <p>Start a conversation with the AI coding assistant</p>
+                  <p className="text-sm">Ask me to generate code, fix bugs, or explain concepts</p>
+                </div>
               </div>
             )}
             {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-3 ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`flex gap-3 max-w-[90%] ${
-                    message.role === "user" ? "flex-row-reverse" : "flex-row"
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted"
-                    }`}
-                  >
-                    {message.role === "user" ? (
-                      <User className="h-4 w-4" />
-                    ) : (
-                      <Bot className="h-4 w-4" />
-                    )}
-                  </div>
-                  <div
-                    className={`rounded-lg p-3 min-w-0 ${
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted"
-                    }`}
-                  >
-                    <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere max-w-full">
-                      {message.content}
-                    </div>
-                    {message.codeActions && message.codeActions.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        <div className="text-sm font-medium">Code Actions:</div>
-                        {message.codeActions.map((action, index) => (
-                          <div
-                            key={index}
-                            className="bg-background/50 rounded p-2 border"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0 flex-1">
-                                <div className="font-mono text-sm truncate">
-                                  {action.type.toUpperCase()}: {action.path}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {action.description}
-                                </div>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => executeCodeAction(action)}
-                                className="flex-shrink-0"
-                              >
-                                <Code className="h-3 w-3 mr-1" />
-                                Apply
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+              <Message key={message.id} from={message.role}>
+                <div className="h-8 w-8 rounded-full overflow-hidden shrink-0">
+                  {message.role === "user" ? (
+                    <Orb hoverIntensity={0.3} rotateOnHover={false} hue={120} />
+                  ) : (
+                    <Orb hoverIntensity={0.3} rotateOnHover={false} hue={240} />
+                  )}
                 </div>
-              </div>
+                <MessageContent variant="contained">
+                  <MessageRenderer 
+                    content={message.content} 
+                    codeActions={message.codeActions}
+                  />
+                  {message.codeActions && message.codeActions.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <div className="text-sm font-medium">Code Actions:</div>
+                      {message.codeActions.map((action, index) => (
+                        <div
+                          key={index}
+                          className="bg-background/50 rounded p-2 border"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-mono text-sm truncate">
+                                {action.type.toUpperCase()}: {action.path}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {action.description}
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => executeCodeAction(action)}
+                              className="shrink-0"
+                            >
+                              <Code className="h-3 w-3 mr-1" />
+                              Apply
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </MessageContent>
+              </Message>
             ))}
             {isLoading && (
-              <div className="flex gap-3 justify-start">
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                  <Bot className="h-4 w-4" />
+              <Message from="assistant">
+                <div className="h-8 w-8 rounded-full overflow-hidden shrink-0">
+                  <Orb hoverIntensity={0.3} rotateOnHover={false} hue={240} />
                 </div>
-                <div className="bg-muted rounded-lg p-3">
+                <MessageContent variant="contained">
                   <div className="flex items-center gap-2">
                     <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
                     <span>Thinking...</span>
                   </div>
-                </div>
-              </div>
+                </MessageContent>
+              </Message>
             )}
             <div ref={messagesEndRef} />
           </div>
@@ -268,7 +253,7 @@ export function ChatPanel({ onCodeAction, currentFile, projectFiles, selectedCod
             onClick={sendMessage}
             disabled={!input.trim() || isLoading}
             size="sm"
-            className="flex-shrink-0"
+            className="shrink-0"
           >
             <Send className="h-4 w-4" />
           </Button>

@@ -68,7 +68,13 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, ...updateData } = body as { id: string; [key: string]: any };
+    const { id, name, activeFilePath, openFilePaths, dirtyFiles } = body as { 
+      id: string; 
+      name?: string; 
+      activeFilePath?: string | null; 
+      openFilePaths?: string[]; 
+      dirtyFiles?: string[]; 
+    };
     
     if (!id) {
       return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
@@ -76,11 +82,32 @@ export async function PUT(request: NextRequest) {
 
     const { databases, config } = getAppwriteClient();
     
+    // Build update data - only include fields that are provided
+    const updateData: any = {
+      updatedAt: new Date().toISOString(),
+    };
+    
+    if (name !== undefined) updateData.name = name;
+    if (activeFilePath !== undefined) {
+      // Appwrite accepts null for optional string attributes
+      updateData.activeFilePath = activeFilePath;
+    }
+    if (openFilePaths !== undefined) {
+      // Ensure arrays are properly formatted for Appwrite
+      updateData.openFilePaths = Array.isArray(openFilePaths) ? openFilePaths : [];
+    }
+    if (dirtyFiles !== undefined) {
+      // Ensure arrays are properly formatted for Appwrite
+      updateData.dirtyFiles = Array.isArray(dirtyFiles) ? dirtyFiles : [];
+    }
+    
+    console.log("Updating project:", id, "with data:", JSON.stringify(updateData, null, 2));
+    
     const updated = await databases.updateDocument(
       config.databaseId, 
       config.projectsCollectionId, 
       id, 
-      { ...updateData, updatedAt: new Date().toISOString() }
+      updateData
     );
 
     return NextResponse.json({ 
@@ -90,13 +117,22 @@ export async function PUT(request: NextRequest) {
         createdAt: updated.createdAt,
         updatedAt: updated.updatedAt,
         activeFilePath: updated.activeFilePath,
-        openFilePaths: updated.openFilePaths,
-        dirtyFiles: updated.dirtyFiles,
+        openFilePaths: updated.openFilePaths || [],
+        dirtyFiles: updated.dirtyFiles || [],
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to update project:", error);
-    return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
+    console.error("Error details:", {
+      message: error.message,
+      code: error.code,
+      type: error.type,
+      response: error.response,
+    });
+    return NextResponse.json({ 
+      error: "Failed to update project",
+      details: error.message || String(error),
+    }, { status: 500 });
   }
 }
 

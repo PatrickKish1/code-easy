@@ -86,8 +86,10 @@ export function deleteProject(projects: Project[], id: string): Project[] {
 }
 
 export function upsertFile(project: Project, path: string, content: string): Project {
-  const idx = project.files.findIndex(f => f.path === path);
-  const files = [...project.files];
+  // Ensure files array exists
+  const existingFiles = project.files || [];
+  const idx = existingFiles.findIndex(f => f.path === path);
+  const files = [...existingFiles];
   if (idx === -1) {
     files.push({ path, content });
   } else {
@@ -97,7 +99,8 @@ export function upsertFile(project: Project, path: string, content: string): Pro
 }
 
 export function deleteFile(project: Project, path: string): Project {
-  const files = project.files.filter(f => f.path !== path);
+  const existingFiles = project.files || [];
+  const files = existingFiles.filter(f => f.path !== path);
   let activeFilePath = project.activeFilePath;
   if (activeFilePath === path) {
     // pick next open tab if available, else first file
@@ -124,7 +127,8 @@ export function closeOpenFile(project: Project, path: string): Project {
   const open = (project.openFilePaths || []).filter(p => p !== path);
   let active = project.activeFilePath;
   if (active === path) {
-    active = open[open.length - 1] || project.files[0]?.path;
+    const existingFiles = project.files || [];
+    active = open[open.length - 1] || existingFiles[0]?.path;
   }
   const dirtyFiles = (project.dirtyFiles || []).filter(p => p !== path);
   return { ...project, openFilePaths: open, activeFilePath: active, dirtyFiles, updatedAt: Date.now() };
@@ -132,7 +136,8 @@ export function closeOpenFile(project: Project, path: string): Project {
 
 export function renameFile(project: Project, oldPath: string, newPath: string): Project {
   if (oldPath === newPath) return project;
-  const files = project.files.map(f => f.path === oldPath ? { path: newPath, content: f.content } : f);
+  const existingFiles = project.files || [];
+  const files = existingFiles.map(f => f.path === oldPath ? { path: newPath, content: f.content } : f);
   const openFilePaths = (project.openFilePaths || []).map(p => p === oldPath ? newPath : p);
   const activeFilePath = project.activeFilePath === oldPath ? newPath : project.activeFilePath;
   return { ...project, files, openFilePaths, activeFilePath, updatedAt: Date.now() };
@@ -141,8 +146,9 @@ export function renameFile(project: Project, oldPath: string, newPath: string): 
 export function createFolder(project: Project, folderPath: string): Project {
   const normalized = folderPath.replace(/\\/g, "/").replace(/\/$/, "");
   const placeholder = `${normalized}/.keep`;
-  if (project.files.some(f => f.path === placeholder)) return project;
-  const files = [...project.files, { path: placeholder, content: "" }];
+  const existingFiles = project.files || [];
+  if (existingFiles.some(f => f.path === placeholder)) return project;
+  const files = [...existingFiles, { path: placeholder, content: "" }];
   return { ...project, files, updatedAt: Date.now() };
 }
 
@@ -150,7 +156,8 @@ export function renameFolder(project: Project, oldPrefix: string, newPrefix: str
   const from = oldPrefix.replace(/\\/g, "/").replace(/\/$/, "");
   const to = newPrefix.replace(/\\/g, "/").replace(/\/$/, "");
   if (from === to) return project;
-  const files = project.files.map(f => f.path.startsWith(from + "/") ? { path: f.path.replace(from + "/", to + "/"), content: f.content } : f);
+  const existingFiles = project.files || [];
+  const files = existingFiles.map(f => f.path.startsWith(from + "/") ? { path: f.path.replace(from + "/", to + "/"), content: f.content } : f);
   const openFilePaths = (project.openFilePaths || []).map(p => p.startsWith(from + "/") ? p.replace(from + "/", to + "/") : p);
   const activeFilePath = project.activeFilePath && project.activeFilePath.startsWith(from + "/") ? project.activeFilePath.replace(from + "/", to + "/") : project.activeFilePath;
   const dirtyFiles = (project.dirtyFiles || []).map(p => p.startsWith(from + "/") ? p.replace(from + "/", to + "/") : p);

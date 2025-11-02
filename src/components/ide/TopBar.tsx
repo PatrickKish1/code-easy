@@ -93,6 +93,9 @@ export function TopBar({ projectName, onCreateProject, onRenameProject, onOpenPr
         </Dialog>
       </div>
       <div className="ml-auto mr-6 flex items-center gap-2">
+        <Link href="/tools">
+          <Button size="sm" variant="ghost">Tools</Button>
+        </Link>
         <ThemeToggle />
         <div className="text-xs text-muted-foreground">VibeCoder</div>
       </div>

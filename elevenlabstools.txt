@@ -1,0 +1,3582 @@
+# List tools
+
+GET https://api.elevenlabs.io/v1/convai/tools
+
+Get all available tools in the workspace.
+
+Reference: https://elevenlabs.io/docs/agents-platform/api-reference/tools/list
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.1.1
+info:
+  title: Get Tools
+  version: endpoint_conversationalAi/tools.list
+paths:
+  /v1/convai/tools:
+    get:
+      operationId: list
+      summary: Get Tools
+      description: Get all available tools in the workspace.
+      tags:
+        - - subpackage_conversationalAi
+          - subpackage_conversationalAi/tools
+      parameters:
+        - name: xi-api-key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolsResponseModel'
+        '422':
+          description: Validation Error
+          content: {}
+components:
+  schemas:
+    DynamicVariableAssignment:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: response
+        dynamic_variable:
+          type: string
+        value_path:
+          type: string
+      required:
+        - dynamic_variable
+        - value_path
+    ToolCallSoundType:
+      type: string
+      enum:
+        - value: typing
+        - value: elevator1
+        - value: elevator2
+        - value: elevator3
+        - value: elevator4
+    ToolCallSoundBehavior:
+      type: string
+      enum:
+        - value: auto
+        - value: always
+    WebhookToolApiSchemaConfigOutputMethod:
+      type: string
+      enum:
+        - value: GET
+        - value: POST
+        - value: PUT
+        - value: PATCH
+        - value: DELETE
+    LiteralJsonSchemaPropertyType:
+      type: string
+      enum:
+        - value: boolean
+        - value: string
+        - value: integer
+        - value: number
+    LiteralJsonSchemaPropertyConstantValue:
+      oneOf:
+        - type: string
+        - type: integer
+        - type: number
+          format: double
+        - type: boolean
+    LiteralJsonSchemaProperty:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyType'
+        description:
+          type: string
+        enum:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        dynamic_variable:
+          type: string
+        constant_value:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyConstantValue'
+      required:
+        - type
+    QueryParamsJsonSchema:
+      type: object
+      properties:
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        required:
+          type: array
+          items:
+            type: string
+      required:
+        - properties
+    ArrayJsonSchemaPropertyOutputItems:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ArrayJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: array
+        description:
+          type: string
+        items:
+          $ref: '#/components/schemas/ArrayJsonSchemaPropertyOutputItems'
+      required:
+        - items
+    ObjectJsonSchemaPropertyOutput:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ObjectJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: object
+        required:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ObjectJsonSchemaPropertyOutput'
+    ConvAISecretLocator:
+      type: object
+      properties:
+        secret_id:
+          type: string
+      required:
+        - secret_id
+    ConvAIDynamicVariable:
+      type: object
+      properties:
+        variable_name:
+          type: string
+      required:
+        - variable_name
+    WebhookToolApiSchemaConfigOutputRequestHeaders:
+      oneOf:
+        - type: string
+        - $ref: '#/components/schemas/ConvAISecretLocator'
+        - $ref: '#/components/schemas/ConvAIDynamicVariable'
+    AuthConnectionLocator:
+      type: object
+      properties:
+        auth_connection_id:
+          type: string
+      required:
+        - auth_connection_id
+    WebhookToolApiSchemaConfig-Output:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfigOutputMethod'
+        path_params_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        query_params_schema:
+          oneOf:
+            - $ref: '#/components/schemas/QueryParamsJsonSchema'
+            - type: 'null'
+        request_body_schema:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        request_headers:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/WebhookToolApiSchemaConfigOutputRequestHeaders
+        auth_connection:
+          oneOf:
+            - $ref: '#/components/schemas/AuthConnectionLocator'
+            - type: 'null'
+      required:
+        - url
+    DynamicVariablesConfigDynamicVariablePlaceholders:
+      oneOf:
+        - type: string
+        - type: number
+          format: double
+        - type: integer
+        - type: boolean
+    DynamicVariablesConfig:
+      type: object
+      properties:
+        dynamic_variable_placeholders:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/DynamicVariablesConfigDynamicVariablePlaceholders
+    ToolExecutionMode:
+      type: string
+      enum:
+        - value: immediate
+        - value: post_tool_speech
+        - value: async
+    WebhookToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: webhook
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        api_schema:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfig-Output'
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+        - api_schema
+    ClientToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: client
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        parameters:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        expects_response:
+          type: boolean
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+    EndCallToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: end_call
+    LanguageDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: language_detection
+    AgentTransfer:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        condition:
+          type: string
+        delay_ms:
+          type: integer
+        transfer_message:
+          type:
+            - string
+            - 'null'
+        enable_transferred_agent_first_message:
+          type: boolean
+      required:
+        - agent_id
+        - condition
+    TransferToAgentToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_agent
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentTransfer'
+      required:
+        - transfers
+    PhoneNumberTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone_dynamic_variable
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri_dynamic_variable
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberTransferTransferDestination:
+      oneOf:
+        - $ref: '#/components/schemas/PhoneNumberTransferDestination'
+        - $ref: '#/components/schemas/SIPUriTransferDestination'
+        - $ref: '#/components/schemas/PhoneNumberDynamicVariableTransferDestination'
+        - $ref: '#/components/schemas/SIPUriDynamicVariableTransferDestination'
+    TransferTypeEnum:
+      type: string
+      enum:
+        - value: conference
+        - value: sip_refer
+    PhoneNumberTransfer:
+      type: object
+      properties:
+        transfer_destination:
+          oneOf:
+            - $ref: '#/components/schemas/PhoneNumberTransferTransferDestination'
+            - type: 'null'
+        phone_number:
+          type:
+            - string
+            - 'null'
+        condition:
+          type: string
+        transfer_type:
+          $ref: '#/components/schemas/TransferTypeEnum'
+      required:
+        - condition
+    TransferToNumberToolConfig-Output:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_number
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberTransfer'
+        enable_client_message:
+          type: boolean
+      required:
+        - transfers
+    SkipTurnToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: skip_turn
+    PlayDTMFToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: play_keypad_touch_tone
+    VoicemailDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: voicemail_detection
+        voicemail_message:
+          type:
+            - string
+            - 'null'
+    SystemToolConfigOutputParams:
+      oneOf:
+        - $ref: '#/components/schemas/EndCallToolConfig'
+        - $ref: '#/components/schemas/LanguageDetectionToolConfig'
+        - $ref: '#/components/schemas/TransferToAgentToolConfig'
+        - $ref: '#/components/schemas/TransferToNumberToolConfig-Output'
+        - $ref: '#/components/schemas/SkipTurnToolConfig'
+        - $ref: '#/components/schemas/PlayDTMFToolConfig'
+        - $ref: '#/components/schemas/VoicemailDetectionToolConfig'
+    SystemToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: system
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        params:
+          $ref: '#/components/schemas/SystemToolConfigOutputParams'
+      required:
+        - name
+        - params
+    ToolResponseModelToolConfig:
+      oneOf:
+        - $ref: '#/components/schemas/WebhookToolConfig-Output'
+        - $ref: '#/components/schemas/ClientToolConfig-Output'
+        - $ref: '#/components/schemas/SystemToolConfig-Output'
+    ResourceAccessInfoRole:
+      type: string
+      enum:
+        - value: admin
+        - value: editor
+        - value: commenter
+        - value: viewer
+    ResourceAccessInfo:
+      type: object
+      properties:
+        is_creator:
+          type: boolean
+        creator_name:
+          type: string
+        creator_email:
+          type: string
+        role:
+          $ref: '#/components/schemas/ResourceAccessInfoRole'
+      required:
+        - is_creator
+        - creator_name
+        - creator_email
+        - role
+    ToolUsageStatsResponseModel:
+      type: object
+      properties:
+        total_calls:
+          type: integer
+        avg_latency_secs:
+          type: number
+          format: double
+      required:
+        - avg_latency_secs
+    ToolResponseModel:
+      type: object
+      properties:
+        id:
+          type: string
+        tool_config:
+          $ref: '#/components/schemas/ToolResponseModelToolConfig'
+        access_info:
+          $ref: '#/components/schemas/ResourceAccessInfo'
+        usage_stats:
+          $ref: '#/components/schemas/ToolUsageStatsResponseModel'
+      required:
+        - id
+        - tool_config
+        - access_info
+        - usage_stats
+    ToolsResponseModel:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolResponseModel'
+      required:
+        - tools
+
+```
+
+## SDK Code Examples
+
+```typescript
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
+async function main() {
+    const client = new ElevenLabsClient({
+        environment: "https://api.elevenlabs.io",
+    });
+    await client.conversationalAi.tools.list();
+}
+main();
+
+```
+
+```python
+from elevenlabs import ElevenLabs
+
+client = ElevenLabs(
+    base_url="https://api.elevenlabs.io"
+)
+
+client.conversational_ai.tools.list()
+
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"io"
+)
+
+func main() {
+
+	url := "https://api.elevenlabs.io/v1/convai/tools"
+
+	req, _ := http.NewRequest("GET", url, nil)
+
+	req.Header.Add("xi-api-key", "xi-api-key")
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	fmt.Println(res)
+	fmt.Println(string(body))
+
+}
+```
+
+```ruby
+require 'uri'
+require 'net/http'
+
+url = URI("https://api.elevenlabs.io/v1/convai/tools")
+
+http = Net::HTTP.new(url.host, url.port)
+http.use_ssl = true
+
+request = Net::HTTP::Get.new(url)
+request["xi-api-key"] = 'xi-api-key'
+
+response = http.request(request)
+puts response.read_body
+```
+
+```java
+HttpResponse<String> response = Unirest.get("https://api.elevenlabs.io/v1/convai/tools")
+  .header("xi-api-key", "xi-api-key")
+  .asString();
+```
+
+```php
+<?php
+
+$client = new \GuzzleHttp\Client();
+
+$response = $client->request('GET', 'https://api.elevenlabs.io/v1/convai/tools', [
+  'headers' => [
+    'xi-api-key' => 'xi-api-key',
+  ],
+]);
+
+echo $response->getBody();
+```
+
+```csharp
+var client = new RestClient("https://api.elevenlabs.io/v1/convai/tools");
+var request = new RestRequest(Method.GET);
+request.AddHeader("xi-api-key", "xi-api-key");
+IRestResponse response = client.Execute(request);
+```
+
+```swift
+import Foundation
+
+let headers = ["xi-api-key": "xi-api-key"]
+
+let request = NSMutableURLRequest(url: NSURL(string: "https://api.elevenlabs.io/v1/convai/tools")! as URL,
+                                        cachePolicy: .useProtocolCachePolicy,
+                                    timeoutInterval: 10.0)
+request.httpMethod = "GET"
+request.allHTTPHeaderFields = headers
+
+let session = URLSession.shared
+let dataTask = session.dataTask(with: request as URLRequest, completionHandler: { (data, response, error) -> Void in
+  if (error != nil) {
+    print(error as Any)
+  } else {
+    let httpResponse = response as? HTTPURLResponse
+    print(httpResponse)
+  }
+})
+
+dataTask.resume()
+```
+
+# Get tool
+
+GET https://api.elevenlabs.io/v1/convai/tools/{tool_id}
+
+Get tool that is available in the workspace.
+
+Reference: https://elevenlabs.io/docs/agents-platform/api-reference/tools/get
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.1.1
+info:
+  title: Get Tool
+  version: endpoint_conversationalAi/tools.get
+paths:
+  /v1/convai/tools/{tool_id}:
+    get:
+      operationId: get
+      summary: Get Tool
+      description: Get tool that is available in the workspace.
+      tags:
+        - - subpackage_conversationalAi
+          - subpackage_conversationalAi/tools
+      parameters:
+        - name: tool_id
+          in: path
+          description: ID of the requested tool.
+          required: true
+          schema:
+            type: string
+        - name: xi-api-key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResponseModel'
+        '422':
+          description: Validation Error
+          content: {}
+components:
+  schemas:
+    DynamicVariableAssignment:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: response
+        dynamic_variable:
+          type: string
+        value_path:
+          type: string
+      required:
+        - dynamic_variable
+        - value_path
+    ToolCallSoundType:
+      type: string
+      enum:
+        - value: typing
+        - value: elevator1
+        - value: elevator2
+        - value: elevator3
+        - value: elevator4
+    ToolCallSoundBehavior:
+      type: string
+      enum:
+        - value: auto
+        - value: always
+    WebhookToolApiSchemaConfigOutputMethod:
+      type: string
+      enum:
+        - value: GET
+        - value: POST
+        - value: PUT
+        - value: PATCH
+        - value: DELETE
+    LiteralJsonSchemaPropertyType:
+      type: string
+      enum:
+        - value: boolean
+        - value: string
+        - value: integer
+        - value: number
+    LiteralJsonSchemaPropertyConstantValue:
+      oneOf:
+        - type: string
+        - type: integer
+        - type: number
+          format: double
+        - type: boolean
+    LiteralJsonSchemaProperty:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyType'
+        description:
+          type: string
+        enum:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        dynamic_variable:
+          type: string
+        constant_value:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyConstantValue'
+      required:
+        - type
+    QueryParamsJsonSchema:
+      type: object
+      properties:
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        required:
+          type: array
+          items:
+            type: string
+      required:
+        - properties
+    ArrayJsonSchemaPropertyOutputItems:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ArrayJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: array
+        description:
+          type: string
+        items:
+          $ref: '#/components/schemas/ArrayJsonSchemaPropertyOutputItems'
+      required:
+        - items
+    ObjectJsonSchemaPropertyOutput:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ObjectJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: object
+        required:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ObjectJsonSchemaPropertyOutput'
+    ConvAISecretLocator:
+      type: object
+      properties:
+        secret_id:
+          type: string
+      required:
+        - secret_id
+    ConvAIDynamicVariable:
+      type: object
+      properties:
+        variable_name:
+          type: string
+      required:
+        - variable_name
+    WebhookToolApiSchemaConfigOutputRequestHeaders:
+      oneOf:
+        - type: string
+        - $ref: '#/components/schemas/ConvAISecretLocator'
+        - $ref: '#/components/schemas/ConvAIDynamicVariable'
+    AuthConnectionLocator:
+      type: object
+      properties:
+        auth_connection_id:
+          type: string
+      required:
+        - auth_connection_id
+    WebhookToolApiSchemaConfig-Output:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfigOutputMethod'
+        path_params_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        query_params_schema:
+          oneOf:
+            - $ref: '#/components/schemas/QueryParamsJsonSchema'
+            - type: 'null'
+        request_body_schema:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        request_headers:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/WebhookToolApiSchemaConfigOutputRequestHeaders
+        auth_connection:
+          oneOf:
+            - $ref: '#/components/schemas/AuthConnectionLocator'
+            - type: 'null'
+      required:
+        - url
+    DynamicVariablesConfigDynamicVariablePlaceholders:
+      oneOf:
+        - type: string
+        - type: number
+          format: double
+        - type: integer
+        - type: boolean
+    DynamicVariablesConfig:
+      type: object
+      properties:
+        dynamic_variable_placeholders:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/DynamicVariablesConfigDynamicVariablePlaceholders
+    ToolExecutionMode:
+      type: string
+      enum:
+        - value: immediate
+        - value: post_tool_speech
+        - value: async
+    WebhookToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: webhook
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        api_schema:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfig-Output'
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+        - api_schema
+    ClientToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: client
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        parameters:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        expects_response:
+          type: boolean
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+    EndCallToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: end_call
+    LanguageDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: language_detection
+    AgentTransfer:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        condition:
+          type: string
+        delay_ms:
+          type: integer
+        transfer_message:
+          type:
+            - string
+            - 'null'
+        enable_transferred_agent_first_message:
+          type: boolean
+      required:
+        - agent_id
+        - condition
+    TransferToAgentToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_agent
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentTransfer'
+      required:
+        - transfers
+    PhoneNumberTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone_dynamic_variable
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri_dynamic_variable
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberTransferTransferDestination:
+      oneOf:
+        - $ref: '#/components/schemas/PhoneNumberTransferDestination'
+        - $ref: '#/components/schemas/SIPUriTransferDestination'
+        - $ref: '#/components/schemas/PhoneNumberDynamicVariableTransferDestination'
+        - $ref: '#/components/schemas/SIPUriDynamicVariableTransferDestination'
+    TransferTypeEnum:
+      type: string
+      enum:
+        - value: conference
+        - value: sip_refer
+    PhoneNumberTransfer:
+      type: object
+      properties:
+        transfer_destination:
+          oneOf:
+            - $ref: '#/components/schemas/PhoneNumberTransferTransferDestination'
+            - type: 'null'
+        phone_number:
+          type:
+            - string
+            - 'null'
+        condition:
+          type: string
+        transfer_type:
+          $ref: '#/components/schemas/TransferTypeEnum'
+      required:
+        - condition
+    TransferToNumberToolConfig-Output:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_number
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberTransfer'
+        enable_client_message:
+          type: boolean
+      required:
+        - transfers
+    SkipTurnToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: skip_turn
+    PlayDTMFToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: play_keypad_touch_tone
+    VoicemailDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: voicemail_detection
+        voicemail_message:
+          type:
+            - string
+            - 'null'
+    SystemToolConfigOutputParams:
+      oneOf:
+        - $ref: '#/components/schemas/EndCallToolConfig'
+        - $ref: '#/components/schemas/LanguageDetectionToolConfig'
+        - $ref: '#/components/schemas/TransferToAgentToolConfig'
+        - $ref: '#/components/schemas/TransferToNumberToolConfig-Output'
+        - $ref: '#/components/schemas/SkipTurnToolConfig'
+        - $ref: '#/components/schemas/PlayDTMFToolConfig'
+        - $ref: '#/components/schemas/VoicemailDetectionToolConfig'
+    SystemToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: system
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        params:
+          $ref: '#/components/schemas/SystemToolConfigOutputParams'
+      required:
+        - name
+        - params
+    ToolResponseModelToolConfig:
+      oneOf:
+        - $ref: '#/components/schemas/WebhookToolConfig-Output'
+        - $ref: '#/components/schemas/ClientToolConfig-Output'
+        - $ref: '#/components/schemas/SystemToolConfig-Output'
+    ResourceAccessInfoRole:
+      type: string
+      enum:
+        - value: admin
+        - value: editor
+        - value: commenter
+        - value: viewer
+    ResourceAccessInfo:
+      type: object
+      properties:
+        is_creator:
+          type: boolean
+        creator_name:
+          type: string
+        creator_email:
+          type: string
+        role:
+          $ref: '#/components/schemas/ResourceAccessInfoRole'
+      required:
+        - is_creator
+        - creator_name
+        - creator_email
+        - role
+    ToolUsageStatsResponseModel:
+      type: object
+      properties:
+        total_calls:
+          type: integer
+        avg_latency_secs:
+          type: number
+          format: double
+      required:
+        - avg_latency_secs
+    ToolResponseModel:
+      type: object
+      properties:
+        id:
+          type: string
+        tool_config:
+          $ref: '#/components/schemas/ToolResponseModelToolConfig'
+        access_info:
+          $ref: '#/components/schemas/ResourceAccessInfo'
+        usage_stats:
+          $ref: '#/components/schemas/ToolUsageStatsResponseModel'
+      required:
+        - id
+        - tool_config
+        - access_info
+        - usage_stats
+
+```
+
+## SDK Code Examples
+
+```typescript
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
+async function main() {
+    const client = new ElevenLabsClient({
+        environment: "https://api.elevenlabs.io",
+    });
+    await client.conversationalAi.tools.get("tool_id");
+}
+main();
+
+```
+
+```python
+from elevenlabs import ElevenLabs
+
+client = ElevenLabs(
+    base_url="https://api.elevenlabs.io"
+)
+
+client.conversational_ai.tools.get(
+    tool_id="tool_id"
+)
+
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"io"
+)
+
+func main() {
+
+	url := "https://api.elevenlabs.io/v1/convai/tools/tool_id"
+
+	req, _ := http.NewRequest("GET", url, nil)
+
+	req.Header.Add("xi-api-key", "xi-api-key")
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	fmt.Println(res)
+	fmt.Println(string(body))
+
+}
+```
+
+```ruby
+require 'uri'
+require 'net/http'
+
+url = URI("https://api.elevenlabs.io/v1/convai/tools/tool_id")
+
+http = Net::HTTP.new(url.host, url.port)
+http.use_ssl = true
+
+request = Net::HTTP::Get.new(url)
+request["xi-api-key"] = 'xi-api-key'
+
+response = http.request(request)
+puts response.read_body
+```
+
+```java
+HttpResponse<String> response = Unirest.get("https://api.elevenlabs.io/v1/convai/tools/tool_id")
+  .header("xi-api-key", "xi-api-key")
+  .asString();
+```
+
+```php
+<?php
+
+$client = new \GuzzleHttp\Client();
+
+$response = $client->request('GET', 'https://api.elevenlabs.io/v1/convai/tools/tool_id', [
+  'headers' => [
+    'xi-api-key' => 'xi-api-key',
+  ],
+]);
+
+echo $response->getBody();
+```
+
+```csharp
+var client = new RestClient("https://api.elevenlabs.io/v1/convai/tools/tool_id");
+var request = new RestRequest(Method.GET);
+request.AddHeader("xi-api-key", "xi-api-key");
+IRestResponse response = client.Execute(request);
+```
+
+```swift
+import Foundation
+
+let headers = ["xi-api-key": "xi-api-key"]
+
+let request = NSMutableURLRequest(url: NSURL(string: "https://api.elevenlabs.io/v1/convai/tools/tool_id")! as URL,
+                                        cachePolicy: .useProtocolCachePolicy,
+                                    timeoutInterval: 10.0)
+request.httpMethod = "GET"
+request.allHTTPHeaderFields = headers
+
+let session = URLSession.shared
+let dataTask = session.dataTask(with: request as URLRequest, completionHandler: { (data, response, error) -> Void in
+  if (error != nil) {
+    print(error as Any)
+  } else {
+    let httpResponse = response as? HTTPURLResponse
+    print(httpResponse)
+  }
+})
+
+dataTask.resume()
+```
+
+
+# Create tool
+
+POST https://api.elevenlabs.io/v1/convai/tools
+Content-Type: application/json
+
+Add a new tool to the available tools in the workspace.
+
+Reference: https://elevenlabs.io/docs/agents-platform/api-reference/tools/create
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.1.1
+info:
+  title: Add Tool
+  version: endpoint_conversationalAi/tools.create
+paths:
+  /v1/convai/tools:
+    post:
+      operationId: create
+      summary: Add Tool
+      description: Add a new tool to the available tools in the workspace.
+      tags:
+        - - subpackage_conversationalAi
+          - subpackage_conversationalAi/tools
+      parameters:
+        - name: xi-api-key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResponseModel'
+        '422':
+          description: Validation Error
+          content: {}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolRequestModel'
+components:
+  schemas:
+    DynamicVariableAssignment:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: response
+        dynamic_variable:
+          type: string
+        value_path:
+          type: string
+      required:
+        - dynamic_variable
+        - value_path
+    ToolCallSoundType:
+      type: string
+      enum:
+        - value: typing
+        - value: elevator1
+        - value: elevator2
+        - value: elevator3
+        - value: elevator4
+    ToolCallSoundBehavior:
+      type: string
+      enum:
+        - value: auto
+        - value: always
+    WebhookToolApiSchemaConfigInputMethod:
+      type: string
+      enum:
+        - value: GET
+        - value: POST
+        - value: PUT
+        - value: PATCH
+        - value: DELETE
+    LiteralJsonSchemaPropertyType:
+      type: string
+      enum:
+        - value: boolean
+        - value: string
+        - value: integer
+        - value: number
+    LiteralJsonSchemaPropertyConstantValue:
+      oneOf:
+        - type: string
+        - type: integer
+        - type: number
+          format: double
+        - type: boolean
+    LiteralJsonSchemaProperty:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyType'
+        description:
+          type: string
+        enum:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        dynamic_variable:
+          type: string
+        constant_value:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyConstantValue'
+      required:
+        - type
+    QueryParamsJsonSchema:
+      type: object
+      properties:
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        required:
+          type: array
+          items:
+            type: string
+      required:
+        - properties
+    ArrayJsonSchemaPropertyInputItems:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Input'
+    ArrayJsonSchemaProperty-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: array
+        description:
+          type: string
+        items:
+          $ref: '#/components/schemas/ArrayJsonSchemaPropertyInputItems'
+      required:
+        - items
+    ObjectJsonSchemaPropertyInput:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Input'
+    ObjectJsonSchemaProperty-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: object
+        required:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ObjectJsonSchemaPropertyInput'
+    ConvAISecretLocator:
+      type: object
+      properties:
+        secret_id:
+          type: string
+      required:
+        - secret_id
+    ConvAIDynamicVariable:
+      type: object
+      properties:
+        variable_name:
+          type: string
+      required:
+        - variable_name
+    WebhookToolApiSchemaConfigInputRequestHeaders:
+      oneOf:
+        - type: string
+        - $ref: '#/components/schemas/ConvAISecretLocator'
+        - $ref: '#/components/schemas/ConvAIDynamicVariable'
+    AuthConnectionLocator:
+      type: object
+      properties:
+        auth_connection_id:
+          type: string
+      required:
+        - auth_connection_id
+    WebhookToolApiSchemaConfig-Input:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfigInputMethod'
+        path_params_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        query_params_schema:
+          oneOf:
+            - $ref: '#/components/schemas/QueryParamsJsonSchema'
+            - type: 'null'
+        request_body_schema:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+            - type: 'null'
+        request_headers:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/WebhookToolApiSchemaConfigInputRequestHeaders'
+        auth_connection:
+          oneOf:
+            - $ref: '#/components/schemas/AuthConnectionLocator'
+            - type: 'null'
+      required:
+        - url
+    DynamicVariablesConfigDynamicVariablePlaceholders:
+      oneOf:
+        - type: string
+        - type: number
+          format: double
+        - type: integer
+        - type: boolean
+    DynamicVariablesConfig:
+      type: object
+      properties:
+        dynamic_variable_placeholders:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/DynamicVariablesConfigDynamicVariablePlaceholders
+    ToolExecutionMode:
+      type: string
+      enum:
+        - value: immediate
+        - value: post_tool_speech
+        - value: async
+    WebhookToolConfig-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: webhook
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        api_schema:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfig-Input'
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+        - api_schema
+    ClientToolConfig-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: client
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        parameters:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+            - type: 'null'
+        expects_response:
+          type: boolean
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+    EndCallToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: end_call
+    LanguageDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: language_detection
+    AgentTransfer:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        condition:
+          type: string
+        delay_ms:
+          type: integer
+        transfer_message:
+          type:
+            - string
+            - 'null'
+        enable_transferred_agent_first_message:
+          type: boolean
+      required:
+        - agent_id
+        - condition
+    TransferToAgentToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_agent
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentTransfer'
+      required:
+        - transfers
+    PhoneNumberTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone_dynamic_variable
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri_dynamic_variable
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberTransferTransferDestination:
+      oneOf:
+        - $ref: '#/components/schemas/PhoneNumberTransferDestination'
+        - $ref: '#/components/schemas/SIPUriTransferDestination'
+        - $ref: '#/components/schemas/PhoneNumberDynamicVariableTransferDestination'
+        - $ref: '#/components/schemas/SIPUriDynamicVariableTransferDestination'
+    TransferTypeEnum:
+      type: string
+      enum:
+        - value: conference
+        - value: sip_refer
+    PhoneNumberTransfer:
+      type: object
+      properties:
+        transfer_destination:
+          oneOf:
+            - $ref: '#/components/schemas/PhoneNumberTransferTransferDestination'
+            - type: 'null'
+        phone_number:
+          type:
+            - string
+            - 'null'
+        condition:
+          type: string
+        transfer_type:
+          $ref: '#/components/schemas/TransferTypeEnum'
+      required:
+        - condition
+    TransferToNumberToolConfig-Input:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_number
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberTransfer'
+        enable_client_message:
+          type: boolean
+      required:
+        - transfers
+    SkipTurnToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: skip_turn
+    PlayDTMFToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: play_keypad_touch_tone
+    VoicemailDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: voicemail_detection
+        voicemail_message:
+          type:
+            - string
+            - 'null'
+    SystemToolConfigInputParams:
+      oneOf:
+        - $ref: '#/components/schemas/EndCallToolConfig'
+        - $ref: '#/components/schemas/LanguageDetectionToolConfig'
+        - $ref: '#/components/schemas/TransferToAgentToolConfig'
+        - $ref: '#/components/schemas/TransferToNumberToolConfig-Input'
+        - $ref: '#/components/schemas/SkipTurnToolConfig'
+        - $ref: '#/components/schemas/PlayDTMFToolConfig'
+        - $ref: '#/components/schemas/VoicemailDetectionToolConfig'
+    SystemToolConfig-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: system
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        params:
+          $ref: '#/components/schemas/SystemToolConfigInputParams'
+      required:
+        - name
+        - params
+    ToolRequestModelToolConfig:
+      oneOf:
+        - $ref: '#/components/schemas/WebhookToolConfig-Input'
+        - $ref: '#/components/schemas/ClientToolConfig-Input'
+        - $ref: '#/components/schemas/SystemToolConfig-Input'
+    ToolRequestModel:
+      type: object
+      properties:
+        tool_config:
+          $ref: '#/components/schemas/ToolRequestModelToolConfig'
+      required:
+        - tool_config
+    WebhookToolApiSchemaConfigOutputMethod:
+      type: string
+      enum:
+        - value: GET
+        - value: POST
+        - value: PUT
+        - value: PATCH
+        - value: DELETE
+    ArrayJsonSchemaPropertyOutputItems:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ArrayJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: array
+        description:
+          type: string
+        items:
+          $ref: '#/components/schemas/ArrayJsonSchemaPropertyOutputItems'
+      required:
+        - items
+    ObjectJsonSchemaPropertyOutput:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ObjectJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: object
+        required:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ObjectJsonSchemaPropertyOutput'
+    WebhookToolApiSchemaConfigOutputRequestHeaders:
+      oneOf:
+        - type: string
+        - $ref: '#/components/schemas/ConvAISecretLocator'
+        - $ref: '#/components/schemas/ConvAIDynamicVariable'
+    WebhookToolApiSchemaConfig-Output:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfigOutputMethod'
+        path_params_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        query_params_schema:
+          oneOf:
+            - $ref: '#/components/schemas/QueryParamsJsonSchema'
+            - type: 'null'
+        request_body_schema:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        request_headers:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/WebhookToolApiSchemaConfigOutputRequestHeaders
+        auth_connection:
+          oneOf:
+            - $ref: '#/components/schemas/AuthConnectionLocator'
+            - type: 'null'
+      required:
+        - url
+    WebhookToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: webhook
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        api_schema:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfig-Output'
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+        - api_schema
+    ClientToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: client
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        parameters:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        expects_response:
+          type: boolean
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+    TransferToNumberToolConfig-Output:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_number
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberTransfer'
+        enable_client_message:
+          type: boolean
+      required:
+        - transfers
+    SystemToolConfigOutputParams:
+      oneOf:
+        - $ref: '#/components/schemas/EndCallToolConfig'
+        - $ref: '#/components/schemas/LanguageDetectionToolConfig'
+        - $ref: '#/components/schemas/TransferToAgentToolConfig'
+        - $ref: '#/components/schemas/TransferToNumberToolConfig-Output'
+        - $ref: '#/components/schemas/SkipTurnToolConfig'
+        - $ref: '#/components/schemas/PlayDTMFToolConfig'
+        - $ref: '#/components/schemas/VoicemailDetectionToolConfig'
+    SystemToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: system
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        params:
+          $ref: '#/components/schemas/SystemToolConfigOutputParams'
+      required:
+        - name
+        - params
+    ToolResponseModelToolConfig:
+      oneOf:
+        - $ref: '#/components/schemas/WebhookToolConfig-Output'
+        - $ref: '#/components/schemas/ClientToolConfig-Output'
+        - $ref: '#/components/schemas/SystemToolConfig-Output'
+    ResourceAccessInfoRole:
+      type: string
+      enum:
+        - value: admin
+        - value: editor
+        - value: commenter
+        - value: viewer
+    ResourceAccessInfo:
+      type: object
+      properties:
+        is_creator:
+          type: boolean
+        creator_name:
+          type: string
+        creator_email:
+          type: string
+        role:
+          $ref: '#/components/schemas/ResourceAccessInfoRole'
+      required:
+        - is_creator
+        - creator_name
+        - creator_email
+        - role
+    ToolUsageStatsResponseModel:
+      type: object
+      properties:
+        total_calls:
+          type: integer
+        avg_latency_secs:
+          type: number
+          format: double
+      required:
+        - avg_latency_secs
+    ToolResponseModel:
+      type: object
+      properties:
+        id:
+          type: string
+        tool_config:
+          $ref: '#/components/schemas/ToolResponseModelToolConfig'
+        access_info:
+          $ref: '#/components/schemas/ResourceAccessInfo'
+        usage_stats:
+          $ref: '#/components/schemas/ToolUsageStatsResponseModel'
+      required:
+        - id
+        - tool_config
+        - access_info
+        - usage_stats
+
+```
+
+## SDK Code Examples
+
+```typescript
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
+async function main() {
+    const client = new ElevenLabsClient({
+        environment: "https://api.elevenlabs.io",
+    });
+    await client.conversationalAi.tools.create({});
+}
+main();
+
+```
+
+```python
+from elevenlabs import ElevenLabs
+
+client = ElevenLabs(
+    base_url="https://api.elevenlabs.io"
+)
+
+client.conversational_ai.tools.create(
+    tool_config=
+)
+
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"strings"
+	"net/http"
+	"io"
+)
+
+func main() {
+
+	url := "https://api.elevenlabs.io/v1/convai/tools"
+
+	payload := strings.NewReader("{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}")
+
+	req, _ := http.NewRequest("POST", url, payload)
+
+	req.Header.Add("xi-api-key", "xi-api-key")
+	req.Header.Add("Content-Type", "application/json")
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	fmt.Println(res)
+	fmt.Println(string(body))
+
+}
+```
+
+```ruby
+require 'uri'
+require 'net/http'
+
+url = URI("https://api.elevenlabs.io/v1/convai/tools")
+
+http = Net::HTTP.new(url.host, url.port)
+http.use_ssl = true
+
+request = Net::HTTP::Post.new(url)
+request["xi-api-key"] = 'xi-api-key'
+request["Content-Type"] = 'application/json'
+request.body = "{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}"
+
+response = http.request(request)
+puts response.read_body
+```
+
+```java
+HttpResponse<String> response = Unirest.post("https://api.elevenlabs.io/v1/convai/tools")
+  .header("xi-api-key", "xi-api-key")
+  .header("Content-Type", "application/json")
+  .body("{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}")
+  .asString();
+```
+
+```php
+<?php
+
+$client = new \GuzzleHttp\Client();
+
+$response = $client->request('POST', 'https://api.elevenlabs.io/v1/convai/tools', [
+  'body' => '{
+  "tool_config": {
+    "name": "string",
+    "description": "string",
+    "api_schema": {
+      "url": "string"
+    }
+  }
+}',
+  'headers' => [
+    'Content-Type' => 'application/json',
+    'xi-api-key' => 'xi-api-key',
+  ],
+]);
+
+echo $response->getBody();
+```
+
+```csharp
+var client = new RestClient("https://api.elevenlabs.io/v1/convai/tools");
+var request = new RestRequest(Method.POST);
+request.AddHeader("xi-api-key", "xi-api-key");
+request.AddHeader("Content-Type", "application/json");
+request.AddParameter("application/json", "{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}", ParameterType.RequestBody);
+IRestResponse response = client.Execute(request);
+```
+
+```swift
+import Foundation
+
+let headers = [
+  "xi-api-key": "xi-api-key",
+  "Content-Type": "application/json"
+]
+let parameters = ["tool_config": [
+    "name": "string",
+    "description": "string",
+    "api_schema": ["url": "string"]
+  ]] as [String : Any]
+
+let postData = JSONSerialization.data(withJSONObject: parameters, options: [])
+
+let request = NSMutableURLRequest(url: NSURL(string: "https://api.elevenlabs.io/v1/convai/tools")! as URL,
+                                        cachePolicy: .useProtocolCachePolicy,
+                                    timeoutInterval: 10.0)
+request.httpMethod = "POST"
+request.allHTTPHeaderFields = headers
+request.httpBody = postData as Data
+
+let session = URLSession.shared
+let dataTask = session.dataTask(with: request as URLRequest, completionHandler: { (data, response, error) -> Void in
+  if (error != nil) {
+    print(error as Any)
+  } else {
+    let httpResponse = response as? HTTPURLResponse
+    print(httpResponse)
+  }
+})
+
+dataTask.resume()
+```
+
+
+# Update tool
+
+PATCH https://api.elevenlabs.io/v1/convai/tools/{tool_id}
+Content-Type: application/json
+
+Update tool that is available in the workspace.
+
+Reference: https://elevenlabs.io/docs/agents-platform/api-reference/tools/update
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.1.1
+info:
+  title: Update Tool
+  version: endpoint_conversationalAi/tools.update
+paths:
+  /v1/convai/tools/{tool_id}:
+    patch:
+      operationId: update
+      summary: Update Tool
+      description: Update tool that is available in the workspace.
+      tags:
+        - - subpackage_conversationalAi
+          - subpackage_conversationalAi/tools
+      parameters:
+        - name: tool_id
+          in: path
+          description: ID of the requested tool.
+          required: true
+          schema:
+            type: string
+        - name: xi-api-key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResponseModel'
+        '422':
+          description: Validation Error
+          content: {}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolRequestModel'
+components:
+  schemas:
+    DynamicVariableAssignment:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: response
+        dynamic_variable:
+          type: string
+        value_path:
+          type: string
+      required:
+        - dynamic_variable
+        - value_path
+    ToolCallSoundType:
+      type: string
+      enum:
+        - value: typing
+        - value: elevator1
+        - value: elevator2
+        - value: elevator3
+        - value: elevator4
+    ToolCallSoundBehavior:
+      type: string
+      enum:
+        - value: auto
+        - value: always
+    WebhookToolApiSchemaConfigInputMethod:
+      type: string
+      enum:
+        - value: GET
+        - value: POST
+        - value: PUT
+        - value: PATCH
+        - value: DELETE
+    LiteralJsonSchemaPropertyType:
+      type: string
+      enum:
+        - value: boolean
+        - value: string
+        - value: integer
+        - value: number
+    LiteralJsonSchemaPropertyConstantValue:
+      oneOf:
+        - type: string
+        - type: integer
+        - type: number
+          format: double
+        - type: boolean
+    LiteralJsonSchemaProperty:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyType'
+        description:
+          type: string
+        enum:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        dynamic_variable:
+          type: string
+        constant_value:
+          $ref: '#/components/schemas/LiteralJsonSchemaPropertyConstantValue'
+      required:
+        - type
+    QueryParamsJsonSchema:
+      type: object
+      properties:
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        required:
+          type: array
+          items:
+            type: string
+      required:
+        - properties
+    ArrayJsonSchemaPropertyInputItems:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Input'
+    ArrayJsonSchemaProperty-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: array
+        description:
+          type: string
+        items:
+          $ref: '#/components/schemas/ArrayJsonSchemaPropertyInputItems'
+      required:
+        - items
+    ObjectJsonSchemaPropertyInput:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Input'
+    ObjectJsonSchemaProperty-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: object
+        required:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ObjectJsonSchemaPropertyInput'
+    ConvAISecretLocator:
+      type: object
+      properties:
+        secret_id:
+          type: string
+      required:
+        - secret_id
+    ConvAIDynamicVariable:
+      type: object
+      properties:
+        variable_name:
+          type: string
+      required:
+        - variable_name
+    WebhookToolApiSchemaConfigInputRequestHeaders:
+      oneOf:
+        - type: string
+        - $ref: '#/components/schemas/ConvAISecretLocator'
+        - $ref: '#/components/schemas/ConvAIDynamicVariable'
+    AuthConnectionLocator:
+      type: object
+      properties:
+        auth_connection_id:
+          type: string
+      required:
+        - auth_connection_id
+    WebhookToolApiSchemaConfig-Input:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfigInputMethod'
+        path_params_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        query_params_schema:
+          oneOf:
+            - $ref: '#/components/schemas/QueryParamsJsonSchema'
+            - type: 'null'
+        request_body_schema:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+            - type: 'null'
+        request_headers:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/WebhookToolApiSchemaConfigInputRequestHeaders'
+        auth_connection:
+          oneOf:
+            - $ref: '#/components/schemas/AuthConnectionLocator'
+            - type: 'null'
+      required:
+        - url
+    DynamicVariablesConfigDynamicVariablePlaceholders:
+      oneOf:
+        - type: string
+        - type: number
+          format: double
+        - type: integer
+        - type: boolean
+    DynamicVariablesConfig:
+      type: object
+      properties:
+        dynamic_variable_placeholders:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/DynamicVariablesConfigDynamicVariablePlaceholders
+    ToolExecutionMode:
+      type: string
+      enum:
+        - value: immediate
+        - value: post_tool_speech
+        - value: async
+    WebhookToolConfig-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: webhook
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        api_schema:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfig-Input'
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+        - api_schema
+    ClientToolConfig-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: client
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        parameters:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Input'
+            - type: 'null'
+        expects_response:
+          type: boolean
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+    EndCallToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: end_call
+    LanguageDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: language_detection
+    AgentTransfer:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        condition:
+          type: string
+        delay_ms:
+          type: integer
+        transfer_message:
+          type:
+            - string
+            - 'null'
+        enable_transferred_agent_first_message:
+          type: boolean
+      required:
+        - agent_id
+        - condition
+    TransferToAgentToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_agent
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentTransfer'
+      required:
+        - transfers
+    PhoneNumberTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: phone_dynamic_variable
+        phone_number:
+          type: string
+      required:
+        - phone_number
+    SIPUriDynamicVariableTransferDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: sip_uri_dynamic_variable
+        sip_uri:
+          type: string
+      required:
+        - sip_uri
+    PhoneNumberTransferTransferDestination:
+      oneOf:
+        - $ref: '#/components/schemas/PhoneNumberTransferDestination'
+        - $ref: '#/components/schemas/SIPUriTransferDestination'
+        - $ref: '#/components/schemas/PhoneNumberDynamicVariableTransferDestination'
+        - $ref: '#/components/schemas/SIPUriDynamicVariableTransferDestination'
+    TransferTypeEnum:
+      type: string
+      enum:
+        - value: conference
+        - value: sip_refer
+    PhoneNumberTransfer:
+      type: object
+      properties:
+        transfer_destination:
+          oneOf:
+            - $ref: '#/components/schemas/PhoneNumberTransferTransferDestination'
+            - type: 'null'
+        phone_number:
+          type:
+            - string
+            - 'null'
+        condition:
+          type: string
+        transfer_type:
+          $ref: '#/components/schemas/TransferTypeEnum'
+      required:
+        - condition
+    TransferToNumberToolConfig-Input:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_number
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberTransfer'
+        enable_client_message:
+          type: boolean
+      required:
+        - transfers
+    SkipTurnToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: skip_turn
+    PlayDTMFToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: play_keypad_touch_tone
+    VoicemailDetectionToolConfig:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: voicemail_detection
+        voicemail_message:
+          type:
+            - string
+            - 'null'
+    SystemToolConfigInputParams:
+      oneOf:
+        - $ref: '#/components/schemas/EndCallToolConfig'
+        - $ref: '#/components/schemas/LanguageDetectionToolConfig'
+        - $ref: '#/components/schemas/TransferToAgentToolConfig'
+        - $ref: '#/components/schemas/TransferToNumberToolConfig-Input'
+        - $ref: '#/components/schemas/SkipTurnToolConfig'
+        - $ref: '#/components/schemas/PlayDTMFToolConfig'
+        - $ref: '#/components/schemas/VoicemailDetectionToolConfig'
+    SystemToolConfig-Input:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: system
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        params:
+          $ref: '#/components/schemas/SystemToolConfigInputParams'
+      required:
+        - name
+        - params
+    ToolRequestModelToolConfig:
+      oneOf:
+        - $ref: '#/components/schemas/WebhookToolConfig-Input'
+        - $ref: '#/components/schemas/ClientToolConfig-Input'
+        - $ref: '#/components/schemas/SystemToolConfig-Input'
+    ToolRequestModel:
+      type: object
+      properties:
+        tool_config:
+          $ref: '#/components/schemas/ToolRequestModelToolConfig'
+      required:
+        - tool_config
+    WebhookToolApiSchemaConfigOutputMethod:
+      type: string
+      enum:
+        - value: GET
+        - value: POST
+        - value: PUT
+        - value: PATCH
+        - value: DELETE
+    ArrayJsonSchemaPropertyOutputItems:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ArrayJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: array
+        description:
+          type: string
+        items:
+          $ref: '#/components/schemas/ArrayJsonSchemaPropertyOutputItems'
+      required:
+        - items
+    ObjectJsonSchemaPropertyOutput:
+      oneOf:
+        - $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+        - $ref: '#/components/schemas/ArrayJsonSchemaProperty-Output'
+    ObjectJsonSchemaProperty-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: object
+        required:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ObjectJsonSchemaPropertyOutput'
+    WebhookToolApiSchemaConfigOutputRequestHeaders:
+      oneOf:
+        - type: string
+        - $ref: '#/components/schemas/ConvAISecretLocator'
+        - $ref: '#/components/schemas/ConvAIDynamicVariable'
+    WebhookToolApiSchemaConfig-Output:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfigOutputMethod'
+        path_params_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LiteralJsonSchemaProperty'
+        query_params_schema:
+          oneOf:
+            - $ref: '#/components/schemas/QueryParamsJsonSchema'
+            - type: 'null'
+        request_body_schema:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        request_headers:
+          type: object
+          additionalProperties:
+            $ref: >-
+              #/components/schemas/WebhookToolApiSchemaConfigOutputRequestHeaders
+        auth_connection:
+          oneOf:
+            - $ref: '#/components/schemas/AuthConnectionLocator'
+            - type: 'null'
+      required:
+        - url
+    WebhookToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: webhook
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        api_schema:
+          $ref: '#/components/schemas/WebhookToolApiSchemaConfig-Output'
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+        - api_schema
+    ClientToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: client
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        parameters:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectJsonSchemaProperty-Output'
+            - type: 'null'
+        expects_response:
+          type: boolean
+        dynamic_variables:
+          $ref: '#/components/schemas/DynamicVariablesConfig'
+        execution_mode:
+          $ref: '#/components/schemas/ToolExecutionMode'
+      required:
+        - name
+        - description
+    TransferToNumberToolConfig-Output:
+      type: object
+      properties:
+        system_tool_type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: transfer_to_number
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberTransfer'
+        enable_client_message:
+          type: boolean
+      required:
+        - transfers
+    SystemToolConfigOutputParams:
+      oneOf:
+        - $ref: '#/components/schemas/EndCallToolConfig'
+        - $ref: '#/components/schemas/LanguageDetectionToolConfig'
+        - $ref: '#/components/schemas/TransferToAgentToolConfig'
+        - $ref: '#/components/schemas/TransferToNumberToolConfig-Output'
+        - $ref: '#/components/schemas/SkipTurnToolConfig'
+        - $ref: '#/components/schemas/PlayDTMFToolConfig'
+        - $ref: '#/components/schemas/VoicemailDetectionToolConfig'
+    SystemToolConfig-Output:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - type: stringLiteral
+              value: system
+        name:
+          type: string
+        description:
+          type: string
+        response_timeout_secs:
+          type: integer
+        disable_interruptions:
+          type: boolean
+        force_pre_tool_speech:
+          type: boolean
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicVariableAssignment'
+        tool_call_sound:
+          oneOf:
+            - $ref: '#/components/schemas/ToolCallSoundType'
+            - type: 'null'
+        tool_call_sound_behavior:
+          $ref: '#/components/schemas/ToolCallSoundBehavior'
+        params:
+          $ref: '#/components/schemas/SystemToolConfigOutputParams'
+      required:
+        - name
+        - params
+    ToolResponseModelToolConfig:
+      oneOf:
+        - $ref: '#/components/schemas/WebhookToolConfig-Output'
+        - $ref: '#/components/schemas/ClientToolConfig-Output'
+        - $ref: '#/components/schemas/SystemToolConfig-Output'
+    ResourceAccessInfoRole:
+      type: string
+      enum:
+        - value: admin
+        - value: editor
+        - value: commenter
+        - value: viewer
+    ResourceAccessInfo:
+      type: object
+      properties:
+        is_creator:
+          type: boolean
+        creator_name:
+          type: string
+        creator_email:
+          type: string
+        role:
+          $ref: '#/components/schemas/ResourceAccessInfoRole'
+      required:
+        - is_creator
+        - creator_name
+        - creator_email
+        - role
+    ToolUsageStatsResponseModel:
+      type: object
+      properties:
+        total_calls:
+          type: integer
+        avg_latency_secs:
+          type: number
+          format: double
+      required:
+        - avg_latency_secs
+    ToolResponseModel:
+      type: object
+      properties:
+        id:
+          type: string
+        tool_config:
+          $ref: '#/components/schemas/ToolResponseModelToolConfig'
+        access_info:
+          $ref: '#/components/schemas/ResourceAccessInfo'
+        usage_stats:
+          $ref: '#/components/schemas/ToolUsageStatsResponseModel'
+      required:
+        - id
+        - tool_config
+        - access_info
+        - usage_stats
+
+```
+
+## SDK Code Examples
+
+```typescript
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
+async function main() {
+    const client = new ElevenLabsClient({
+        environment: "https://api.elevenlabs.io",
+    });
+    await client.conversationalAi.tools.update("tool_id", {});
+}
+main();
+
+```
+
+```python
+from elevenlabs import ElevenLabs
+
+client = ElevenLabs(
+    base_url="https://api.elevenlabs.io"
+)
+
+client.conversational_ai.tools.update(
+    tool_id="tool_id",
+    tool_config=
+)
+
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"strings"
+	"net/http"
+	"io"
+)
+
+func main() {
+
+	url := "https://api.elevenlabs.io/v1/convai/tools/tool_id"
+
+	payload := strings.NewReader("{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}")
+
+	req, _ := http.NewRequest("PATCH", url, payload)
+
+	req.Header.Add("xi-api-key", "xi-api-key")
+	req.Header.Add("Content-Type", "application/json")
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	fmt.Println(res)
+	fmt.Println(string(body))
+
+}
+```
+
+```ruby
+require 'uri'
+require 'net/http'
+
+url = URI("https://api.elevenlabs.io/v1/convai/tools/tool_id")
+
+http = Net::HTTP.new(url.host, url.port)
+http.use_ssl = true
+
+request = Net::HTTP::Patch.new(url)
+request["xi-api-key"] = 'xi-api-key'
+request["Content-Type"] = 'application/json'
+request.body = "{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}"
+
+response = http.request(request)
+puts response.read_body
+```
+
+```java
+HttpResponse<String> response = Unirest.patch("https://api.elevenlabs.io/v1/convai/tools/tool_id")
+  .header("xi-api-key", "xi-api-key")
+  .header("Content-Type", "application/json")
+  .body("{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}")
+  .asString();
+```
+
+```php
+<?php
+
+$client = new \GuzzleHttp\Client();
+
+$response = $client->request('PATCH', 'https://api.elevenlabs.io/v1/convai/tools/tool_id', [
+  'body' => '{
+  "tool_config": {
+    "name": "string",
+    "description": "string",
+    "api_schema": {
+      "url": "string"
+    }
+  }
+}',
+  'headers' => [
+    'Content-Type' => 'application/json',
+    'xi-api-key' => 'xi-api-key',
+  ],
+]);
+
+echo $response->getBody();
+```
+
+```csharp
+var client = new RestClient("https://api.elevenlabs.io/v1/convai/tools/tool_id");
+var request = new RestRequest(Method.PATCH);
+request.AddHeader("xi-api-key", "xi-api-key");
+request.AddHeader("Content-Type", "application/json");
+request.AddParameter("application/json", "{\n  \"tool_config\": {\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"api_schema\": {\n      \"url\": \"string\"\n    }\n  }\n}", ParameterType.RequestBody);
+IRestResponse response = client.Execute(request);
+```
+
+```swift
+import Foundation
+
+let headers = [
+  "xi-api-key": "xi-api-key",
+  "Content-Type": "application/json"
+]
+let parameters = ["tool_config": [
+    "name": "string",
+    "description": "string",
+    "api_schema": ["url": "string"]
+  ]] as [String : Any]
+
+let postData = JSONSerialization.data(withJSONObject: parameters, options: [])
+
+let request = NSMutableURLRequest(url: NSURL(string: "https://api.elevenlabs.io/v1/convai/tools/tool_id")! as URL,
+                                        cachePolicy: .useProtocolCachePolicy,
+                                    timeoutInterval: 10.0)
+request.httpMethod = "PATCH"
+request.allHTTPHeaderFields = headers
+request.httpBody = postData as Data
+
+let session = URLSession.shared
+let dataTask = session.dataTask(with: request as URLRequest, completionHandler: { (data, response, error) -> Void in
+  if (error != nil) {
+    print(error as Any)
+  } else {
+    let httpResponse = response as? HTTPURLResponse
+    print(httpResponse)
+  }
+})
+
+dataTask.resume()
+```
+
+
+# Delete tool
+
+DELETE https://api.elevenlabs.io/v1/convai/tools/{tool_id}
+
+Delete tool from the workspace.
+
+Reference: https://elevenlabs.io/docs/agents-platform/api-reference/tools/delete
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.1.1
+info:
+  title: Delete Tool
+  version: endpoint_conversationalAi/tools.delete
+paths:
+  /v1/convai/tools/{tool_id}:
+    delete:
+      operationId: delete
+      summary: Delete Tool
+      description: Delete tool from the workspace.
+      tags:
+        - - subpackage_conversationalAi
+          - subpackage_conversationalAi/tools
+      parameters:
+        - name: tool_id
+          in: path
+          description: ID of the requested tool.
+          required: true
+          schema:
+            type: string
+        - name: xi-api-key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                description: Any type
+        '422':
+          description: Validation Error
+          content: {}
+
+```
+
+## SDK Code Examples
+
+```typescript
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
+async function main() {
+    const client = new ElevenLabsClient({
+        environment: "https://api.elevenlabs.io",
+    });
+    await client.conversationalAi.tools.delete("tool_id");
+}
+main();
+
+```
+
+```python
+from elevenlabs import ElevenLabs
+
+client = ElevenLabs(
+    base_url="https://api.elevenlabs.io"
+)
+
+client.conversational_ai.tools.delete(
+    tool_id="tool_id"
+)
+
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"io"
+)
+
+func main() {
+
+	url := "https://api.elevenlabs.io/v1/convai/tools/tool_id"
+
+	req, _ := http.NewRequest("DELETE", url, nil)
+
+	req.Header.Add("xi-api-key", "xi-api-key")
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	fmt.Println(res)
+	fmt.Println(string(body))
+
+}
+```
+
+```ruby
+require 'uri'
+require 'net/http'
+
+url = URI("https://api.elevenlabs.io/v1/convai/tools/tool_id")
+
+http = Net::HTTP.new(url.host, url.port)
+http.use_ssl = true
+
+request = Net::HTTP::Delete.new(url)
+request["xi-api-key"] = 'xi-api-key'
+
+response = http.request(request)
+puts response.read_body
+```
+
+```java
+HttpResponse<String> response = Unirest.delete("https://api.elevenlabs.io/v1/convai/tools/tool_id")
+  .header("xi-api-key", "xi-api-key")
+  .asString();
+```
+
+```php
+<?php
+
+$client = new \GuzzleHttp\Client();
+
+$response = $client->request('DELETE', 'https://api.elevenlabs.io/v1/convai/tools/tool_id', [
+  'headers' => [
+    'xi-api-key' => 'xi-api-key',
+  ],
+]);
+
+echo $response->getBody();
+```
+
+```csharp
+var client = new RestClient("https://api.elevenlabs.io/v1/convai/tools/tool_id");
+var request = new RestRequest(Method.DELETE);
+request.AddHeader("xi-api-key", "xi-api-key");
+IRestResponse response = client.Execute(request);
+```
+
+```swift
+import Foundation
+
+let headers = ["xi-api-key": "xi-api-key"]
+
+let request = NSMutableURLRequest(url: NSURL(string: "https://api.elevenlabs.io/v1/convai/tools/tool_id")! as URL,
+                                        cachePolicy: .useProtocolCachePolicy,
+                                    timeoutInterval: 10.0)
+request.httpMethod = "DELETE"
+request.allHTTPHeaderFields = headers
+
+let session = URLSession.shared
+let dataTask = session.dataTask(with: request as URLRequest, completionHandler: { (data, response, error) -> Void in
+  if (error != nil) {
+    print(error as Any)
+  } else {
+    let httpResponse = response as? HTTPURLResponse
+    print(httpResponse)
+  }
+})
+
+dataTask.resume()
+```
