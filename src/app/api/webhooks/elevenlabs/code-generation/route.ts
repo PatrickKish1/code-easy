@@ -159,17 +159,53 @@ Remember: Always provide the ENTIRE file content, not partial code.`;
     }
 
     // Step 5: Return response to ElevenLabs
+    // Format the response in a way the agent can read and communicate to the user
+    const successfulResults = results.filter(r => r.success);
+    const failedResults = results.filter(r => !r.success);
+    
+    let responseMessage = "";
+    
+    if (successfulResults.length > 0) {
+      responseMessage = `Successfully completed the code generation task!\n\n`;
+      responseMessage += `I've ${successfulResults.some(r => r.action === 'create') ? 'created or ' : ''}modified the following file${successfulResults.length > 1 ? 's' : ''}:\n`;
+      successfulResults.forEach((result, idx) => {
+        responseMessage += `${idx + 1}. ${result.path} (${result.action})\n`;
+        if (result.description) {
+          responseMessage += `   └─ ${result.description}\n`;
+        }
+      });
+      responseMessage += `\nAll changes have been applied and saved to your project. You can see them in your code editor now.`;
+    } else {
+      responseMessage = ` I encountered issues while trying to generate the code.`;
+    }
+    
+    if (failedResults.length > 0) {
+      responseMessage += `\n\n Some operations failed:\n`;
+      failedResults.forEach((result, idx) => {
+        responseMessage += `${idx + 1}. ${result.path}: ${result.error || 'Unknown error'}\n`;
+      });
+    }
+
+    // Return structured response that agent can use
     return NextResponse.json({
-      success: true,
-      message: aiResponse.message,
-      plan: `Generated and applied ${results.filter(r => r.success).length} file changes`,
-      files_modified: results.filter(r => r.success).map(r => r.path),
-      results,
+      success: successfulResults.length > 0,
+      message: responseMessage,
+      summary: {
+        total_files: results.length,
+        successful: successfulResults.length,
+        failed: failedResults.length,
+      },
+      files_modified: successfulResults.map(r => r.path),
+      details: results,
+      // Include the AI's original message for context
+      ai_message: aiResponse.message || "Code generation completed",
     });
 
   } catch (error: any) {
     console.error("[Code Generation Webhook] Error:", error);
     return NextResponse.json({ 
+      success: false,
+      message: ` I encountered an error while processing your request: ${error.message || String(error)}. Please try rephrasing your request or break it into smaller steps.`,
       error: "Failed to generate code",
       details: error.message || String(error),
     }, { status: 500 });

@@ -257,7 +257,12 @@ export default function ToolsPage() {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <CardTitle>{tool.name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle>{tool.name}</CardTitle>
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 font-medium">
+                        {tool.config.type === "client" ? "CLIENT" : "WEBHOOK"}
+                      </span>
+                    </div>
                     <CardDescription>{tool.description}</CardDescription>
                   </div>
                   <div className="flex gap-2">

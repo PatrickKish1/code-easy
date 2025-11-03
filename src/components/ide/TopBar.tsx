@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { LogIn, LogOut, User, Play } from "lucide-react";
 import * as React from "react";
 import Link from "next/link";
 import { readProjectsFromStorage } from "@/lib/projects";
@@ -15,9 +17,24 @@ type TopBarProps = {
   onCreateProject: () => void;
   onRenameProject: () => void;
   onOpenProject: () => void;
+  user?: { id: string; email: string; name: string } | null;
+  isPlayground?: boolean;
+  onLoginClick?: () => void;
+  onLogout?: () => void;
+  onTogglePlayground?: (enabled: boolean) => void;
 };
 
-export function TopBar({ projectName, onCreateProject, onRenameProject, onOpenProject }: TopBarProps) {
+export function TopBar({ 
+  projectName, 
+  onCreateProject, 
+  onRenameProject, 
+  onOpenProject,
+  user,
+  isPlayground = false,
+  onLoginClick,
+  onLogout,
+  onTogglePlayground,
+}: TopBarProps) {
   const router = useRouter();
   const [renameOpen, setRenameOpen] = React.useState(false);
   const [newOpen, setNewOpen] = React.useState(false);
@@ -93,9 +110,42 @@ export function TopBar({ projectName, onCreateProject, onRenameProject, onOpenPr
         </Dialog>
       </div>
       <div className="ml-auto mr-6 flex items-center gap-2">
-        {/* <Link href="/tools">
-          <Button size="sm" variant="ghost">Tools</Button>
-        </Link> */}
+        {isPlayground && (
+          <div className="flex items-center gap-1 text-xs px-2 py-1 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded">
+            <Play className="h-3 w-3" />
+            Playground Mode
+          </div>
+        )}
+        {user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="ghost" className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                {user.name || user.email}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Account</DropdownMenuLabel>
+              <DropdownMenuItem disabled>
+                <div className="text-xs text-muted-foreground">{user.email}</div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onTogglePlayground?.(true)}>
+                <Play className="mr-2 h-4 w-4" />
+                Switch to Playground
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button size="sm" variant="outline" onClick={onLoginClick}>
+            <LogIn className="mr-2 h-4 w-4" />
+            Login
+          </Button>
+        )}
         <ThemeToggle />
         <div className="text-xs text-muted-foreground">VibeCoder</div>
       </div>

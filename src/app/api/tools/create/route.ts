@@ -11,6 +11,45 @@ function convertToolConfig(dashboardConfig: any): any {
     apiConfig.force_pre_tool_speech = false;
   }
 
+  // Client tools don't have api_schema - they have parameters object (not array!)
+  // Only process api_schema transformations for webhook tools
+  if (apiConfig.type === "client") {
+    // Convert parameters array to object format (similar to body schema properties)
+    if (Array.isArray(apiConfig.parameters)) {
+      const parametersObj: Record<string, any> = {};
+      const required: string[] = [];
+
+      apiConfig.parameters.forEach((param: any) => {
+        const key = param.identifier || param.name;
+        if (key) {
+          const paramObj: any = {
+            type: param.data_type || param.type,
+          };
+
+          // Add description if present
+          if (param.description) {
+            paramObj.description = param.description;
+          }
+
+          parametersObj[key] = paramObj;
+
+          // Collect required fields
+          if (param.required) {
+            required.push(key);
+          }
+        }
+      });
+
+      // Convert to object with properties and required array
+      apiConfig.parameters = {
+        properties: parametersObj,
+        ...(required.length > 0 && { required }),
+      };
+    }
+    // The expects_response field is already correct (expects_response, not expectsResponse)
+    return apiConfig;
+  }
+
   if (apiConfig.api_schema) {
     // Fix path_params_schema: [] -> {} (empty object)
     if (Array.isArray(apiConfig.api_schema.path_params_schema)) {

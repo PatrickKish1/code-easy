@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
     }
     // Project attributes
     await safeCreateStringAttr(databases, databaseId, projectsCollectionId, "name", 256, true);
+    await safeCreateStringAttr(databases, databaseId, projectsCollectionId, "userId", 64, false); // Bind projects to users
     await safeCreateStringAttr(databases, databaseId, projectsCollectionId, "activeFilePath", 1024, false);
     await safeCreateStringAttr(databases, databaseId, projectsCollectionId, "createdAt", 64, true);
     await safeCreateStringAttr(databases, databaseId, projectsCollectionId, "updatedAt", 64, true);
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
     }
     // File attributes
     await safeCreateStringAttr(databases, databaseId, filesCollectionId, "projectId", 64, true);
+    await safeCreateStringAttr(databases, databaseId, filesCollectionId, "userId", 64, false); // Bind files to users
     await safeCreateStringAttr(databases, databaseId, filesCollectionId, "path", 1024, true);
     await safeCreateBoolAttr(databases, databaseId, filesCollectionId, "isFolder", false, false);
     await safeCreateStringAttr(databases, databaseId, filesCollectionId, "content", 65535, false, "");

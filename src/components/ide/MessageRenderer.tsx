@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Editor } from "@monaco-editor/react";
-import { FileText, FileCode, FileCode2, FileJson, FileType } from "lucide-react";
+import { getFileIcon, getFileIconProps } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
 
 interface MessageRendererProps {
@@ -15,24 +15,20 @@ interface MessageRendererProps {
   }>;
 }
 
-// Helper to get file icon based on extension
-function getFileIcon(path: string) {
-  const ext = path.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'tsx':
-    case 'jsx':
-      return FileCode2;
-    case 'ts':
-    case 'js':
-      return FileCode;
-    case 'json':
-      return FileJson;
-    case 'md':
-    case 'txt':
-      return FileType;
-    default:
-      return FileText;
-  }
+// File icon component
+function FileIcon({ path, className }: { path: string; className?: string }) {
+  const iconProps = getFileIconProps(path);
+  return (
+    <img
+      src={iconProps.src}
+      alt={iconProps.alt}
+      className={cn("h-4 w-4 object-contain", className)}
+      onError={(e) => {
+        // Fallback to default file icon if image fails to load
+        (e.target as HTMLImageElement).src = "/icons/file.svg";
+      }}
+    />
+  );
 }
 
 // Helper to guess language from path
@@ -143,7 +139,6 @@ export function MessageRenderer({ content, codeActions }: MessageRendererProps) 
         {codeActions.map((action, idx) => {
           if (!action.content) return null;
           
-          const FileIcon = getFileIcon(action.path);
           const language = guessLanguage(action.path);
           
           // Extract description from code content (first comment line)
@@ -163,7 +158,7 @@ export function MessageRenderer({ content, codeActions }: MessageRendererProps) 
             <div key={idx} className="border rounded-lg overflow-hidden bg-muted/30">
               {/* File header */}
               <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/50">
-                <FileIcon className="h-4 w-4 text-muted-foreground" />
+                <FileIcon path={action.path} />
                 <span className="text-sm font-mono text-foreground">{action.path}</span>
                 <span className="text-xs text-muted-foreground italic ml-auto">
                   {language}

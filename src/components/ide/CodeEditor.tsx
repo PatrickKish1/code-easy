@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Editor from "@monaco-editor/react";
+import { getFileIconProps } from "@/lib/file-icons";
 
 type CodeEditorProps = {
   path?: string;
@@ -40,9 +41,23 @@ export function CodeEditor({ path, value, onChange, onSave }: CodeEditorProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onSave]);
 
+  const iconProps = path ? getFileIconProps(path) : null;
+
   return (
     <div className="h-full w-full flex flex-col">
-      <div className="px-3 py-2 border-b text-xs text-muted-foreground">{path || "No file selected"}</div>
+      <div className="px-3 py-2 border-b flex items-center gap-2 text-xs text-muted-foreground">
+        {iconProps && (
+          <img
+            src={iconProps.src}
+            alt={iconProps.alt}
+            className="h-4 w-4 object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = "/icons/file.svg";
+            }}
+          />
+        )}
+        <span>{path || "No file selected"}</span>
+      </div>
       <div className="flex-1 min-h-0">
         <Editor
           height="100%"

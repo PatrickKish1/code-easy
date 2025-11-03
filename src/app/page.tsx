@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { TopBar, ProjectSidebar, CodeEditor, TabsBar } from "@/components/ide";
 import { CallPanel } from "@/components/CallPanel";
+import { FileUpload } from "@/components/FileUpload";
+import { LoginDialog } from "@/components/auth/LoginDialog";
 import {
   Project,
   createDefaultProject,
@@ -19,20 +21,80 @@ import {
   saveFile,
 } from "@/lib/projects";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { LogIn, LogOut, User, Play, Lock } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Home() {
   const router = useRouter();
+  const { user, isLoading: authLoading, isPlayground, sessionToken, logout, setPlaygroundMode } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [isCalling, setIsCalling] = useState(false);
-
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [playgroundSessionId] = useState(() => `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`);
+  
+  // Playground mode: clear files on refresh - always start fresh
   useEffect(() => {
-    loadProjectsFromAppwrite();
-  }, []);
+    if (isPlayground) {
+      // Always start with a fresh, empty project in playground mode
+      const emptyProject = createDefaultProject("Playground");
+      emptyProject.id = playgroundSessionId;
+      emptyProject.files = [];
+      setProject(emptyProject);
+      setProjects([emptyProject]);
+      
+      // Clear any old playground sessions from localStorage on page load
+      // This ensures fresh start each time
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith("playground-")) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+  }, [isPlayground, playgroundSessionId]);
+
+  // Save playground state to localStorage (session-only, cleared on refresh)
+  useEffect(() => {
+    if (isPlayground && project && playgroundSessionId) {
+      const key = `playground-${playgroundSessionId}`;
+      // Use sessionStorage instead of localStorage for playground - clears on tab close
+      // But for now, we'll clear it on each page load anyway (see useEffect above)
+      // This allows working within a session but fresh start on refresh
+      sessionStorage.setItem(key, JSON.stringify(project));
+    }
+  }, [isPlayground, project, playgroundSessionId]);
+
+  // Load projects when auth state changes
+  useEffect(() => {
+    if (!authLoading) {
+      loadProjectsFromAppwrite();
+    }
+  }, [authLoading, user, isPlayground]);
 
   async function loadProjectsFromAppwrite() {
+    // For playground mode, don't load from server
+    if (isPlayground) {
+      return;
+    }
+
     try {
-      const response = await fetch("/api/projects");
+      const url = user?.id 
+        ? `/api/projects?userId=${encodeURIComponent(user.id)}`
+        : "/api/projects";
+      const response = await fetch(url, {
+        headers: {
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
+      });
       const data = await response.json();
       if (data.projects && data.projects.length > 0) {
         const normalized = data.projects.map((p: Project) => ({
@@ -65,17 +127,23 @@ export default function Home() {
           setProject({ ...firstProject, files: [] });
         }
       } else {
-        // Create default project if none exist
-        const response = await fetch("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Welcome Project" })
-        });
-        const data = await response.json();
-        if (data.project) {
-          const projectWithFiles = { ...data.project, files: [] };
-          setProjects([projectWithFiles]);
-          setProject(projectWithFiles);
+        // Create default project if none exist (only for authenticated users)
+        if (user?.id) {
+          const response = await fetch("/api/projects", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+            },
+            body: JSON.stringify({ name: "Welcome Project", userId: user.id })
+          });
+          const data = await response.json();
+          if (data.project) {
+            const projectWithFiles = { ...data.project, files: [] };
+            setProjects([projectWithFiles]);
+            setProject(projectWithFiles);
+            router.push(`/${data.project.id}`);
+          }
         }
       }
     } catch (error) {
@@ -154,45 +222,77 @@ export default function Home() {
     setProject(next);
     const updated = upsertProject(projects, next);
     setProjects(updated);
-    writeProjectsToStorage(updated);
     
-    // Sync to Appwrite
-    try {
-      await fetch("/api/projects", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...next })
-      });
-    } catch (error) {
-      console.error("Failed to sync project to Appwrite:", error);
+    // Only persist to storage/server if not playground
+    if (!isPlayground) {
+      writeProjectsToStorage(updated);
+      
+      // Sync to Appwrite (only for authenticated users)
+      if (user?.id && !next.id.startsWith("playground-")) {
+        try {
+          await fetch("/api/projects", {
+            method: "PUT",
+            headers: { 
+              "Content-Type": "application/json",
+              ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+            },
+            body: JSON.stringify({ 
+              id: next.id,
+              name: next.name,
+              activeFilePath: next.activeFilePath,
+              openFilePaths: next.openFilePaths,
+              dirtyFiles: next.dirtyFiles,
+            })
+          });
+        } catch (error) {
+          console.error("Failed to sync project to Appwrite:", error);
+        }
+      }
     }
   }
 
   async function handleCreateProject() {
+    if (isPlayground) {
+      // For playground, create a new session-based project
+      const newSessionId = `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      const p = createDefaultProject("Playground");
+      p.id = newSessionId;
+      p.files = [];
+      const updated = [p, ...projects];
+      setProjects(updated);
+      setProject(p);
+      router.push(`/${p.id}`);
+      return;
+    }
+
+    if (!user?.id) {
+      setLoginDialogOpen(true);
+      return;
+    }
+
     try {
       const response = await fetch("/api/projects", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "New Project" })
+        headers: { 
+          "Content-Type": "application/json",
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
+        body: JSON.stringify({ name: "New Project", userId: user.id })
       });
       const data = await response.json();
       if (data.project) {
         const projectWithFiles = { ...data.project, files: [] };
         const updated = [projectWithFiles, ...projects];
         setProjects(updated);
-        writeProjectsToStorage(updated);
+        if (!isPlayground) {
+          writeProjectsToStorage(updated);
+        }
         setProject(projectWithFiles);
         router.push(`/${data.project.id}`);
       }
     } catch (error) {
       console.error("Failed to create project:", error);
-      // Fallback to local storage
-      const p = createDefaultProject("New Project");
-      const updated = [p, ...projects];
-      setProjects(updated);
-      writeProjectsToStorage(updated);
-      setProject(p);
-      router.push(`/${p.id}`);
+      alert("Failed to create project. Please try again.");
     }
   }
 
@@ -219,64 +319,119 @@ export default function Home() {
     if (!project) return;
     const next = deleteProjectFile(project, path);
     persist(next);
-    try {
-      await fetch("/api/files", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ action: "delete", path, projectId: project.id }) 
-      });
-    } catch {}
+    if (!isPlayground && user?.id) {
+      try {
+        await fetch("/api/files", { 
+          method: "POST", 
+          headers: { 
+            "Content-Type": "application/json",
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          }, 
+          body: JSON.stringify({ 
+            action: "delete", 
+            path, 
+            projectId: project.id,
+            userId: user.id,
+          }) 
+        });
+      } catch {}
+    }
   }
 
   async function handleCreateFile(path: string) {
     if (!project) return;
     const next = upsertFile(project, path, "");
     persist({ ...next, activeFilePath: path });
-    try {
-      await fetch("/api/files", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ action: "create", path, content: "", projectId: project.id }) 
-      });
-    } catch {}
+    if (!isPlayground && user?.id) {
+      try {
+        await fetch("/api/files", { 
+          method: "POST", 
+          headers: { 
+            "Content-Type": "application/json",
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          }, 
+          body: JSON.stringify({ 
+            action: "create", 
+            path, 
+            content: "", 
+            projectId: project.id,
+            userId: user.id,
+          }) 
+        });
+      } catch {}
+    }
   }
 
   async function handleCreateFolder(path: string) {
     if (!project) return;
     persist(createFolder(project, path));
-    try {
-      await fetch("/api/files", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ action: "create", path, isFolder: true, projectId: project.id }) 
-      });
-    } catch {}
+    if (!isPlayground && user?.id) {
+      try {
+        await fetch("/api/files", { 
+          method: "POST", 
+          headers: { 
+            "Content-Type": "application/json",
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          }, 
+          body: JSON.stringify({ 
+            action: "create", 
+            path, 
+            isFolder: true, 
+            projectId: project.id,
+            userId: user.id,
+          }) 
+        });
+      } catch {}
+    }
   }
 
   async function handleRename(oldPath: string, newPath: string, isFolder: boolean) {
     if (!project) return;
     const next = isFolder ? renameFolder(project, oldPath, newPath) : renameFile(project, oldPath, newPath);
     persist(next);
-    try {
-      await fetch("/api/files", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ action: "rename", path: oldPath, newPath, isFolder, projectId: project.id }) 
-      });
-    } catch {}
+    if (!isPlayground && user?.id) {
+      try {
+        await fetch("/api/files", { 
+          method: "POST", 
+          headers: { 
+            "Content-Type": "application/json",
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          }, 
+          body: JSON.stringify({ 
+            action: "rename", 
+            path: oldPath, 
+            newPath, 
+            isFolder, 
+            projectId: project.id,
+            userId: user.id,
+          }) 
+        });
+      } catch {}
+    }
   }
 
   async function handleChangeCode(code: string) {
     if (!project || !project.activeFilePath) return;
     const next = markDirty(upsertFile(project, project.activeFilePath, code), project.activeFilePath);
     persist(next);
-    try {
-      await fetch("/api/files", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ action: "update", path: project.activeFilePath, content: code, projectId: project.id }) 
-      });
-    } catch {}
+    if (!isPlayground && user?.id) {
+      try {
+        await fetch("/api/files", { 
+          method: "POST", 
+          headers: { 
+            "Content-Type": "application/json",
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          }, 
+          body: JSON.stringify({ 
+            action: "update", 
+            path: project.activeFilePath, 
+            content: code, 
+            projectId: project.id,
+            userId: user.id,
+          }) 
+        });
+      } catch {}
+    }
   }
 
   function handleSave() {
@@ -298,13 +453,24 @@ export default function Home() {
           console.log("Creating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
           const next = upsertFile(project, action.path, action.content);
           persist({ ...next, activeFilePath: action.path });
-          try {
-            await fetch("/api/files", { 
-              method: "POST", 
-              headers: { "Content-Type": "application/json" }, 
-              body: JSON.stringify({ action: "create", path: action.path, content: action.content, projectId: project.id }) 
-            });
-          } catch {}
+          if (!isPlayground && user?.id) {
+            try {
+              await fetch("/api/files", { 
+                method: "POST", 
+                headers: { 
+                  "Content-Type": "application/json",
+                  ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+                }, 
+                body: JSON.stringify({ 
+                  action: "create", 
+                  path: action.path, 
+                  content: action.content, 
+                  projectId: project.id,
+                  userId: user.id,
+                }) 
+              });
+            } catch {}
+          }
         } else {
           console.log("No content provided for create action");
         }
@@ -314,13 +480,24 @@ export default function Home() {
           console.log("Updating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
           const next = upsertFile(project, action.path, action.content);
           persist(next);
-          try {
-            await fetch("/api/files", { 
-              method: "POST", 
-              headers: { "Content-Type": "application/json" }, 
-              body: JSON.stringify({ action: "update", path: action.path, content: action.content, projectId: project.id }) 
-            });
-          } catch {}
+          if (!isPlayground && user?.id) {
+            try {
+              await fetch("/api/files", { 
+                method: "POST", 
+                headers: { 
+                  "Content-Type": "application/json",
+                  ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+                }, 
+                body: JSON.stringify({ 
+                  action: "update", 
+                  path: action.path, 
+                  content: action.content, 
+                  projectId: project.id,
+                  userId: user.id,
+                }) 
+              });
+            } catch {}
+          }
         } else {
           console.log("No content provided for update action");
         }
@@ -329,15 +506,51 @@ export default function Home() {
         console.log("Deleting file:", action.path);
         const next = deleteProjectFile(project, action.path);
         persist(next);
-        try {
-          await fetch("/api/files", { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify({ action: "delete", path: action.path, projectId: project.id }) 
-          });
-        } catch {}
+        if (!isPlayground && user?.id) {
+          try {
+            await fetch("/api/files", { 
+              method: "POST", 
+              headers: { 
+                "Content-Type": "application/json",
+                ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+              }, 
+              body: JSON.stringify({ 
+                action: "delete", 
+                path: action.path, 
+                projectId: project.id,
+                userId: user.id,
+              }) 
+            });
+          } catch {}
+        }
         break;
     }
+  }
+
+  const handleFilesUploaded = useCallback((files: Array<{ path: string; content: string; isFolder: boolean }>) => {
+    if (!project) return;
+    
+    // Add folders first
+    const folders = files.filter(f => f.isFolder);
+    let updated = project;
+    folders.forEach(f => {
+      updated = createFolder(updated, f.path);
+    });
+    
+    // Then add files
+    files.filter(f => !f.isFolder).forEach(f => {
+      updated = upsertFile(updated, f.path, f.content);
+    });
+    
+    persist(updated);
+  }, [project]);
+
+  if (authLoading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
   }
 
   return (
@@ -347,18 +560,42 @@ export default function Home() {
         onCreateProject={handleCreateProject}
         onOpenProject={handleOpenProject}
         onRenameProject={handleRenameProject}
+        user={user}
+        isPlayground={isPlayground}
+        onLoginClick={() => setLoginDialogOpen(true)}
+        onLogout={logout}
+        onTogglePlayground={(enabled) => {
+          setPlaygroundMode(enabled);
+          // Clear current project when switching modes
+          if (enabled) {
+            const playgroundId = `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+            const emptyProject = createDefaultProject("Playground");
+            emptyProject.id = playgroundId;
+            emptyProject.files = [];
+            setProject(emptyProject);
+            setProjects([emptyProject]);
+          } else {
+            loadProjectsFromAppwrite();
+          }
+        }}
       />
+      <LoginDialog open={loginDialogOpen} onOpenChange={setLoginDialogOpen} />
       <div className="flex flex-1 min-h-0">
-        <ProjectSidebar
-          projectName={project?.name || "Project"}
-          files={project?.files || []}
-          activePath={project?.activeFilePath}
-          onSelectFile={handleSelectFile}
-          onDeleteFile={handleDeleteFile}
-          onCreateFile={handleCreateFile}
-          onCreateFolder={handleCreateFolder}
-          onRename={handleRename}
-        />
+        <div className="w-64 border-r flex flex-col">
+          <ProjectSidebar
+            projectName={project?.name || "Project"}
+            files={project?.files || []}
+            activePath={project?.activeFilePath}
+            onSelectFile={handleSelectFile}
+            onDeleteFile={handleDeleteFile}
+            onCreateFile={handleCreateFile}
+            onCreateFolder={handleCreateFolder}
+            onRename={handleRename}
+          />
+          <div className="border-t p-4">
+            <FileUpload onFilesUploaded={handleFilesUploaded} projectId={project?.id} />
+          </div>
+        </div>
         <div className="flex-1 grid grid-cols-[1fr_360px] min-h-0">
           <div className="border-r min-h-0">
             <TabsBar

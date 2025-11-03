@@ -13,9 +13,9 @@ This guide explains how to configure your ElevenLabs agent to generate code via 
 
 ## Prerequisites
 
-1. ✅ Deploy your Next.js app (Vercel, Netlify, etc.)
-2. ✅ Get your deployed webhook URL: `https://your-domain.com/api/webhooks/elevenlabs`
-3. ✅ Have an ElevenLabs agent created
+1. Deploy your Next.js app (Vercel, Netlify, etc.)
+2. Get your deployed webhook URL: `https://your-domain.com/api/webhooks/elevenlabs`
+3. Have an ElevenLabs agent created
 
 ## Step 1: Configure ElevenLabs Server Tools
 
@@ -185,10 +185,10 @@ To let the agent see existing code before modifying:
 
 ## Current Status
 
-✅ **Text Chat**: Working - Code actions parsed from AI responses  
-✅ **File Management**: Working - Files saved to Appwrite  
-✅ **Realtime Updates**: Working - SSE broadcasts changes  
-✅ **Voice Connection**: Working - ElevenLabs React SDK integrated  
+**Text Chat**: Working - Code actions parsed from AI responses  
+**File Management**: Working - Files saved to Appwrite  
+**Realtime Updates**: Working - SSE broadcasts changes  
+**Voice Connection**: Working - ElevenLabs React SDK integrated  
 ⏳ **Voice Code Generation**: Needs tool configuration in ElevenLabs dashboard
 
 ## Troubleshooting
@@ -212,11 +212,11 @@ To let the agent see existing code before modifying:
 ## Example Voice Conversations
 
 **User**: "Create a React component called Button"  
-**Agent**: [Calls create_or_update_file tool] ✅ File created
+**Agent**: [Calls create_or_update_file tool] File created
 
 **User**: "Update the Button component to add a disabled state"  
-**Agent**: [Calls get_project_files] → [Calls create_or_update_file with updated code] ✅ File updated
+**Agent**: [Calls get_project_files] → [Calls create_or_update_file with updated code] File updated
 
 **User**: "Delete the old test file"  
-**Agent**: [Calls delete_file] ✅ File deleted
+**Agent**: [Calls delete_file] File deleted
 

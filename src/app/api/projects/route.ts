@@ -1,13 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppwriteClient } from "@/lib/appwrite";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+    const isPlayground = searchParams.get("playground") === "true";
+    
     const { databases, config } = getAppwriteClient();
-    const docs = await databases.listDocuments(config.databaseId, config.projectsCollectionId, []);
+    
+    // For playground mode, don't return any projects (fresh start each time)
+    if (isPlayground) {
+      return NextResponse.json({ projects: [] });
+    }
+    
+    // Build query filters
+    const queries: string[] = [];
+    if (userId) {
+      queries.push(`equal("userId", "${userId}")`);
+    }
+    
+    const docs = await databases.listDocuments(
+      config.databaseId, 
+      config.projectsCollectionId, 
+      queries.length > 0 ? queries : []
+    );
     const projects = (docs.documents || []).map((d: any) => ({
       id: d.$id,
       name: d.name,
+      userId: d.userId || null,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
       activeFilePath: d.activeFilePath || null,
@@ -24,16 +45,40 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, id } = body as { name: string; id?: string };
+    const { name, id, userId, isPlayground } = body as { name: string; id?: string; userId?: string | null; isPlayground?: boolean };
     
     if (!name) {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
+    }
+
+    // For playground mode, generate a session-based project ID that won't persist
+    if (isPlayground) {
+      const playgroundId = `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      return NextResponse.json({ 
+        project: {
+          id: playgroundId,
+          name,
+          userId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          activeFilePath: null,
+          openFilePaths: [],
+          dirtyFiles: [],
+          isPlayground: true,
+        }
+      });
+    }
+
+    // Authenticated users must provide userId
+    if (!userId) {
+      return NextResponse.json({ error: "User ID is required for authenticated projects" }, { status: 400 });
     }
 
     const { databases, config } = getAppwriteClient();
     
     const projectData = {
       name,
+      userId, // Bind project to user
       activeFilePath: null,
       openFilePaths: [],
       dirtyFiles: [],
@@ -52,6 +97,7 @@ export async function POST(request: NextRequest) {
       project: {
         id: created.$id,
         name: created.name,
+        userId: created.userId,
         createdAt: created.createdAt,
         updatedAt: created.updatedAt,
         activeFilePath: created.activeFilePath,

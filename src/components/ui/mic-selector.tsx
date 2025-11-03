@@ -89,9 +89,13 @@ export function MicSelector({
       const startPreview = async () => {
         try {
           const constraints: MediaStreamConstraints = {
-            audio: selectedDevice?.deviceId
-              ? { deviceId: { exact: selectedDevice.deviceId } }
-              : true,
+            audio: {
+              ...(selectedDevice?.deviceId ? { deviceId: { exact: selectedDevice.deviceId } } : {}),
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              sampleRate: 48000, // Higher quality sample rate
+            },
           };
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
           setPreviewStream(stream);

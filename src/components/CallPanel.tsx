@@ -14,6 +14,7 @@ import * as React from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Phone, MessageSquare, Settings, Mic, MicOff } from "lucide-react";
 import { useConversation } from "@elevenlabs/react";
+import { useMemo } from "react";
 
 type CallPanelProps = {
   onStart: () => void;
@@ -29,11 +30,9 @@ type CallPanelProps = {
 export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile, projectFiles, selectedCode, projectId }: CallPanelProps) {
   const [orbType, setOrbType] = React.useState("shader");
   const [selectedMic, setSelectedMic] = React.useState<string>("");
-  const [isMuted, setIsMuted] = React.useState(false);
+  const [isMuted, setIsMuted] = React.useState(true); // Start muted by default
   const [selectedVoice, setSelectedVoice] = React.useState<string>("");
   const [voices, setVoices] = React.useState<Voice[]>([]);
-  const waveformStreamRef = React.useRef<MediaStream | null>(null);
-  const [showWaveform, setShowWaveform] = React.useState(false);
   const [loadingVoices, setLoadingVoices] = React.useState(false);
   // Separate stream ref for persistent mic preview (starts disabled)
   const previewMicStreamRef = React.useRef<MediaStream | null>(null);
@@ -41,93 +40,314 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
   const [previewMicEnabled, setPreviewMicEnabled] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   
-  // Initialize ElevenLabs conversation
+  // Memoize client tools to prevent recreation on every render (which causes disconnections)
+  const clientTools = useMemo(() => ({
+      // Generate code using AI
+      // This tool is ONLY executed when the agent explicitly calls it - lazy execution, not "rendered"
+      generateCode: async ({ request, language, context }: { request: string; language: string; context?: string }): Promise<any> => {
+        try {
+          console.log('[Client Tool] generateCode called:', { request: request.substring(0, 50) + '...', language, hasContext: !!context });
+          
+          // Create a unique thread ID for this generation request
+          const threadId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+          
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              threadId,
+              prompt: `${request}\n\nLanguage: ${language}${context ? `\n\nAdditional context: ${context}` : ''}`,
+              context: {
+                appwriteProjectId: projectId,
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[Client Tool] generateCode API error:', errorText);
+            throw new Error(`Failed to generate code: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          
+          // Extract code from the first code action, or use the message as fallback
+          const codeAction = data.codeActions?.[0];
+          const code = codeAction?.content || '';
+          const filename = codeAction?.path || `main.${language === 'typescript' ? 'ts' : language === 'javascript' ? 'js' : language}`;
+          const description = codeAction?.description || data.message || 'Generated code';
+
+          console.log('[Client Tool] generateCode success:', { filename, codeLength: code.length });
+          
+          return {
+            success: true,
+            code,
+            language,
+            filename,
+            description,
+          };
+        } catch (error) {
+          console.error('[Client Tool] Error generating code:', error);
+          // Always return a response - never throw, to prevent disconnection
+          return {
+            success: false,
+            code: '',
+            language: language || 'javascript',
+            filename: '',
+            description: error instanceof Error ? error.message : 'Failed to generate code',
+          };
+        }
+      },
+
+      // Create a new file
+      createFile: async ({ filename, content }: { filename: string; content: string }): Promise<any> => {
+        try {
+          if (!projectId) {
+            throw new Error('Project ID is required');
+          }
+
+          const response = await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'create',
+              path: filename,
+              content,
+              projectId,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Failed to create file: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          return {
+            success: true,
+            message: `File ${filename} created successfully`,
+            id: data.id,
+          };
+        } catch (error) {
+          console.error('Error creating file:', error);
+          return {
+            success: false,
+            message: error instanceof Error ? error.message : 'Failed to create file',
+          };
+        }
+      },
+
+      // Update an existing file
+      updateFile: async ({ filename, content }: { filename: string; content: string }): Promise<any> => {
+        try {
+          if (!projectId) {
+            throw new Error('Project ID is required');
+          }
+
+          const response = await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update',
+              path: filename,
+              content,
+              projectId,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Failed to update file: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          return {
+            success: true,
+            message: `File ${filename} updated successfully`,
+            id: data.id,
+          };
+        } catch (error) {
+          console.error('Error updating file:', error);
+          return {
+            success: false,
+            message: error instanceof Error ? error.message : 'Failed to update file',
+          };
+        }
+      },
+
+      // Delete a file
+      deleteFile: async ({ filename }: { filename: string }): Promise<any> => {
+        try {
+          if (!projectId) {
+            throw new Error('Project ID is required');
+          }
+
+          const response = await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'delete',
+              path: filename,
+              projectId,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Failed to delete file: ${response.statusText}`);
+          }
+
+          return {
+            success: true,
+            message: `File ${filename} deleted successfully`,
+          };
+        } catch (error) {
+          console.error('Error deleting file:', error);
+          return {
+            success: false,
+            message: error instanceof Error ? error.message : 'Failed to delete file',
+          };
+        }
+      },
+
+      // Get project files or read a specific file
+      getProjectFiles: async ({ path }: { path?: string }): Promise<any> => {
+        try {
+          if (!projectId) {
+            throw new Error('Project ID is required');
+          }
+
+          const url = `/api/files?projectId=${encodeURIComponent(projectId)}${path ? `&path=${encodeURIComponent(path)}` : ''}`;
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Failed to get files: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          
+          // If a specific path was requested, return just that file
+          if (path) {
+            const file = data.files?.find((f: any) => f.path === path);
+            if (file) {
+              return {
+                success: true,
+                files: [file],
+                content: file.content,
+                path: file.path,
+              };
+            }
+            return {
+              success: false,
+              message: `File ${path} not found`,
+            };
+          }
+
+          // Return all files
+          return {
+            success: true,
+            files: data.files || [],
+            count: data.files?.length || 0,
+          };
+        } catch (error) {
+          console.error('Error getting project files:', error);
+          return {
+            success: false,
+            message: error instanceof Error ? error.message : 'Failed to get project files',
+            files: [],
+          };
+        }
+      },
+  }), [projectId]); // Only recreate if projectId changes
+
+  // Track if we're currently connecting to avoid race conditions
+  const isConnectingRef = React.useRef(false);
+  
+  // Track connection metadata for fallback logic
+  const connectionMetadataRef = React.useRef<{
+    startTime?: number;
+    connectionType?: 'websocket' | 'webrtc';
+    disconnectionCount?: number;
+  }>({});
+  
   const conversation = useConversation({
     onConnect: () => {
-      console.log('ElevenLabs: Connected');
+      console.log('ElevenLabs: Connected successfully');
+      isConnectingRef.current = false;
+      // Track when connection started
+      connectionMetadataRef.current.startTime = Date.now();
       onStart();
     },
     onDisconnect: () => {
       console.log('ElevenLabs: Disconnected');
+      isConnectingRef.current = false;
+      
+      // Check if this was a premature disconnection
+      const metadata = connectionMetadataRef.current;
+      if (metadata.startTime) {
+        const connectionDuration = Date.now() - metadata.startTime;
+        const wasPremature = connectionDuration < 10000; // Less than 10 seconds
+        
+        console.log(`Connection duration: ${connectionDuration}ms, was premature: ${wasPremature}`);
+        
+        if (wasPremature && metadata.connectionType) {
+          // Increment disconnection count
+          metadata.disconnectionCount = (metadata.disconnectionCount || 0) + 1;
+          
+          console.warn(`Premature disconnection detected (${connectionDuration}ms). Disconnection count: ${metadata.disconnectionCount}`);
+          console.warn(`Connection type used: ${metadata.connectionType}`);
+          
+          // Reset metadata for next attempt
+          metadata.startTime = undefined;
+        } else {
+          // Normal disconnection, reset all tracking
+          connectionMetadataRef.current = {};
+        }
+      }
+      
+      // Reset mic to initial muted state when call ends
+      setIsMuted(true);
+      // Don't stop preview mic - keep it running if it was enabled
       onEnd();
     },
     onMessage: (message) => {
       console.log('ElevenLabs Message:', message);
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('ElevenLabs Error:', error);
+      // Log more details about the error
+      if (error?.message) {
+        console.error('Error message:', error.message);
+      }
+      if (error?.clientToolName) {
+        console.error('Client tool error:', error.clientToolName);
+      }
+      if (error?.stack) {
+        console.error('Error stack:', error.stack);
+      }
+      if (error?.code) {
+        console.error('Error code:', error.code);
+      }
+      if (error?.type) {
+        console.error('Error type:', error.type);
+      }
+      // Log the full error object for debugging
+      console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      
+      // Check if this is a critical error that would cause disconnection
+      const errorMessage = error?.message?.toLowerCase() || '';
+      if (errorMessage.includes('websocket') || errorMessage.includes('connection') || errorMessage.includes('closed')) {
+        console.error('Connection error detected - this may cause disconnection');
+      }
+      
+      // Only log the error, the conversation should continue
     },
+    clientTools,
   });
-
-  // Audio level tracking for orb visualization
-  const levelRef = React.useRef(0);
-  const audioContextRef = React.useRef<AudioContext | null>(null);
-  const analyserRef = React.useRef<AnalyserNode | null>(null);
-  const dataArrayRef = React.useRef<Uint8Array | null>(null);
-  const animationFrameRef = React.useRef<number | null>(null);
-  const micStreamRef = React.useRef<MediaStream | null>(null);
-
-  // Start audio level monitoring for orb visualization
-  const startAudioMonitoring = React.useCallback((stream: MediaStream) => {
-    if (typeof window === "undefined" || audioContextRef.current) return;
-    
-    try {
-      micStreamRef.current = stream;
-      // Note: MediaStream.clone() might not be available in all browsers
-      // LiveWaveform will use the stream via onStreamReady callback
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 1024;
-      source.connect(analyserRef.current);
-      const bufferLength = analyserRef.current.frequencyBinCount;
-      const buffer = new ArrayBuffer(bufferLength);
-      dataArrayRef.current = new Uint8Array(buffer);
-
-      const tick = () => {
-        animationFrameRef.current = requestAnimationFrame(tick);
-        if (!analyserRef.current || !dataArrayRef.current) return;
-        
-        analyserRef.current.getByteTimeDomainData(dataArrayRef.current as any);
-        
-        // Compute RMS for amplitude 0..1
-        let sum = 0;
-        for (let i = 0; i < dataArrayRef.current.length; i++) {
-          const v = (dataArrayRef.current[i] - 128) / 128;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / dataArrayRef.current.length);
-        levelRef.current = Math.min(1, rms * 3);
-      };
-      tick();
-    } catch (error) {
-      console.error('Failed to start audio monitoring:', error);
-    }
-  }, []);
-
-  // Stop audio level monitoring
-  const stopAudioMonitoring = React.useCallback(() => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(track => track.stop());
-      micStreamRef.current = null;
-    }
-    if (waveformStreamRef.current) {
-      waveformStreamRef.current.getTracks().forEach(track => track.stop());
-      waveformStreamRef.current = null;
-      setShowWaveform(false);
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-    dataArrayRef.current = null;
-    levelRef.current = 0;
-  }, []);
 
   // Fetch voices on mount
   React.useEffect(() => {
@@ -156,9 +376,13 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       const initPreviewMic = async () => {
         try {
           const constraints: MediaStreamConstraints = {
-            audio: selectedMic
-              ? { deviceId: { exact: selectedMic } }
-              : true,
+            audio: {
+              ...(selectedMic ? { deviceId: { exact: selectedMic } } : {}),
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              sampleRate: 48000, // Higher quality sample rate
+            },
           };
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
           previewMicStreamRef.current = stream;
@@ -187,85 +411,139 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
     };
   }, [previewMicEnabled, selectedMic]);
 
-  // Start conversation handler
+  // Start conversation handler with automatic fallback between connection types
   const handleStartConversation = React.useCallback(async () => {
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current || conversation.status === 'connected') {
+      console.warn('Already connecting or connected');
+      return;
+    }
+
     try {
+      isConnectingRef.current = true;
       const agentId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID;
       if (!agentId) {
         console.error('ElevenLabs Agent ID not configured');
         alert('ElevenLabs Agent ID is not configured. Please set NEXT_PUBLIC_ELEVENLABS_AGENT_ID in your environment variables.');
+        isConnectingRef.current = false;
         return;
       }
 
-      // Request microphone permission with selected device
-      let micStream: MediaStream;
+      // Request microphone permission BEFORE starting session (required by ElevenLabs)
+      // This ensures permissions are granted and prevents early disconnection
       try {
-        const constraints: MediaStreamConstraints = {
-          audio: selectedMic
-            ? { deviceId: { exact: selectedMic } }
-            : true,
-        };
-        micStream = await navigator.mediaDevices.getUserMedia(constraints);
-        // Start audio monitoring for orb visualization with the mic stream
-        startAudioMonitoring(micStream);
-        waveformStreamRef.current = micStream;
-        setShowWaveform(true);
-      } catch (micError) {
+        const permissionStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          } 
+        });
+        // Release immediately - ElevenLabs SDK will request its own stream
+        permissionStream.getTracks().forEach(track => track.stop());
+        console.log('Microphone permission granted');
+      } catch (micError: any) {
         console.error('Microphone permission denied:', micError);
         alert('Microphone access is required for voice conversations. Please grant permission and try again.');
+        isConnectingRef.current = false;
         return;
       }
 
-      // Try WebRTC first, fallback to WebSocket if it fails
+      // Determine which connection type to try based on previous failures
+      const metadata = connectionMetadataRef.current;
+      let connectionType: 'websocket' | 'webrtc' = 'websocket'; // Default to websocket
+      
+      // If we had a premature disconnection, switch connection types
+      if (metadata.disconnectionCount && metadata.disconnectionCount > 0) {
+        // Switch to the other connection type
+        connectionType = metadata.connectionType === 'websocket' ? 'webrtc' : 'websocket';
+        console.log(`🔄 Switching connection type from ${metadata.connectionType} to ${connectionType} due to previous premature disconnection`);
+      } else if (metadata.connectionType) {
+        // Use the last successful connection type
+        connectionType = metadata.connectionType;
+        console.log(`Using previously successful connection type: ${connectionType}`);
+      }
+      
+      // Store which connection type we're trying
+      metadata.connectionType = connectionType;
+      
+      console.log(`Starting ${connectionType} connection...`);
       try {
-        await conversation.startSession({
+        const sessionResult = await conversation.startSession({
           agentId: agentId,
-          connectionType: 'webrtc',
+          connectionType: connectionType,
           userId: projectId || 'anonymous',
         });
-      } catch (webrtcError: any) {
-        console.warn('WebRTC connection failed, trying WebSocket:', webrtcError);
-        // Stop the previous session attempt if it partially started
+        console.log('startSession returned:', sessionResult);
+        
+        // Don't wait - let onConnect handle the success state
+        // The connection happens asynchronously
+      } catch (connectionError: any) {
+        console.error(`${connectionType} connection failed:`, connectionError);
+        console.error('Error details:', {
+          message: connectionError?.message,
+          stack: connectionError?.stack,
+          name: connectionError?.name,
+          code: connectionError?.code,
+        });
+        
+        // Try to clean up any partial session
         try {
           await conversation.endSession();
-        } catch {}
+        } catch (cleanupError) {
+          console.warn('Failed to clean up session:', cleanupError);
+        }
         
-        // Fallback to WebSocket
+        // If one connection type fails completely, try the other
+        const fallbackType = connectionType === 'websocket' ? 'webrtc' : 'websocket';
+        console.log(`🔄 Trying fallback connection type: ${fallbackType}`);
+        
         try {
-          await conversation.startSession({
+          metadata.connectionType = fallbackType;
+          const fallbackResult = await conversation.startSession({
             agentId: agentId,
-            connectionType: 'websocket',
+            connectionType: fallbackType,
             userId: projectId || 'anonymous',
           });
-        } catch (wsError) {
-          console.error('WebSocket connection also failed:', wsError);
-          throw wsError;
+          console.log('Fallback connection succeeded:', fallbackResult);
+        } catch (fallbackError: any) {
+          console.error(`Fallback ${fallbackType} connection also failed:`, fallbackError);
+          
+          // Clean up fallback attempt
+          try {
+            await conversation.endSession();
+          } catch (cleanupError) {
+            console.warn('Failed to clean up fallback session:', cleanupError);
+          }
+          
+          isConnectingRef.current = false;
+          const errorMessage = fallbackError?.message || connectionError?.message || 'Unknown error';
+          alert(`Failed to start conversation with both connection types. Error: ${errorMessage}. Please check your internet connection and try again.`);
+          throw fallbackError;
         }
       }
     } catch (error: any) {
       console.error('Failed to start conversation:', error);
-      stopAudioMonitoring();
+      isConnectingRef.current = false;
       const errorMessage = error?.message || 'Unknown error';
       alert(`Failed to start conversation: ${errorMessage}. Please check your internet connection and try again.`);
     }
-  }, [conversation, startAudioMonitoring, stopAudioMonitoring, projectId]);
+  }, [conversation, projectId, selectedMic, isMuted]);
 
   // End conversation handler
   const handleEndConversation = React.useCallback(async () => {
     try {
       await conversation.endSession();
-      stopAudioMonitoring();
     } catch (error) {
       console.error('Failed to end conversation:', error);
     }
-  }, [conversation, stopAudioMonitoring]);
+  }, [conversation]);
 
   // Cleanup on unmount
   React.useEffect(() => {
-    return () => {
-      stopAudioMonitoring();
-    };
-  }, [stopAudioMonitoring]);
+    // No cleanup needed anymore since we don't manage audio streams
+    return () => {};
+  }, []);
 
   // Use conversation status for isActive
   const conversationActive = conversation.status === 'connected';
@@ -355,7 +633,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
                 </div>
                 <div className="mx-auto rounded-full overflow-hidden" style={{ height: 240, width: 240, aspectRatio: '1/1' }}>
                   {orbType === "shader" ? (
-                    <Orb hoverIntensity={0.5} rotateOnHover={true} hue={0} forceHoverState={conversation.isSpeaking || false} audioLevel={levelRef.current} />
+                    <Orb hoverIntensity={0.5} rotateOnHover={true} hue={0} forceHoverState={conversation.isSpeaking || false} audioLevel={0} />
                   ) : orbType === "video:purple" ? (
                     <VideoOrb src="/orbs/purple-orb.mp4" />
                   ) : orbType === "video:dusty" ? (
@@ -367,56 +645,45 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
                   )}
                 </div>
                 
-                {/* Mic preview waveform with toggle */}
-                <div className="w-full max-w-xs">
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setPreviewMicEnabled(!previewMicEnabled)}
-                      className="h-8 w-8 p-0"
-                      title={previewMicEnabled ? "Disable mic preview" : "Enable mic preview"}
-                    >
-                      {previewMicEnabled ? (
-                        <Mic className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <MicOff className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">Microphone Preview</span>
-                  </div>
-                  {previewMicEnabled && showPreviewWaveform ? (
-                    <LiveWaveform
-                      active={!isMuted && !!previewMicStreamRef.current}
-                      stream={previewMicStreamRef.current}
-                      mode="static"
-                      height={50}
-                      barWidth={3}
-                      barGap={1}
-                      sensitivity={2}
-                    />
-                  ) : (
-                    <div className="h-[50px] w-full border border-dashed border-muted-foreground/20 rounded flex items-center justify-center">
-                      <span className="text-xs text-muted-foreground">Click mic icon to enable preview</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Live Waveform for active call feedback */}
-                {conversationActive && showWaveform && (
+                {/* Preview waveform - shows when not in call */}
+                {!conversationActive && (
                   <div className="w-full max-w-xs">
-                    <div className="text-xs text-muted-foreground mb-1 text-center">Call Audio Level</div>
-                    <LiveWaveform
-                      active={!isMuted && !!waveformStreamRef.current}
-                      stream={waveformStreamRef.current}
-                      mode="static"
-                      height={50}
-                      barWidth={3}
-                      barGap={1}
-                      sensitivity={2}
-                    />
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPreviewMicEnabled(!previewMicEnabled)}
+                        className="h-8 w-8 p-0"
+                        title={previewMicEnabled ? "Disable mic preview" : "Enable mic preview"}
+                      >
+                        {previewMicEnabled ? (
+                          <Mic className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <MicOff className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">Microphone Preview</span>
+                    </div>
+                    {previewMicEnabled && showPreviewWaveform ? (
+                      <LiveWaveform
+                        active={!!previewMicStreamRef.current}
+                        stream={previewMicStreamRef.current}
+                        mode="static"
+                        height={50}
+                        barWidth={3}
+                        barGap={1}
+                        sensitivity={2}
+                      />
+                    ) : (
+                      <div className="h-[50px] w-full border border-dashed border-muted-foreground/20 rounded flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground">Click mic icon to enable preview</span>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {/* Active call waveform - disabled to prevent mic stream conflicts */}
+                {/* If needed in future, must use ElevenLabs SDK's internal stream */}
 
                 {/* Controls */}
                 <div className="w-full space-y-3">

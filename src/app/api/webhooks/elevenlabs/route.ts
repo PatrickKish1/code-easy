@@ -54,10 +54,23 @@ export async function POST(request: NextRequest) {
 
       await processAction(project_id, action);
       
+      // Format response for the agent
+      let message = `Successfully ${action_type === 'create' ? 'created' : action_type === 'update' ? 'updated' : action_type === 'delete' ? 'deleted' : 'renamed'} ${file_path}`;
+      if (action_type === 'rename' && new_path) {
+        message += ` to ${new_path}`;
+      }
+      if (description) {
+        message += `\n\nDescription: ${description}`;
+      }
+      message += `\n\nThe change has been applied and saved to your project. You can see it in your code editor now.`;
+      
       return NextResponse.json({ 
         success: true, 
-        message: `Successfully ${action_type} ${file_path}`,
-        description 
+        message,
+        action: action_type,
+        file_path,
+        new_path,
+        description,
       });
     } else if ('actions' in body) {
       // Legacy format (array of actions)
@@ -77,9 +90,14 @@ export async function POST(request: NextRequest) {
         received: body 
       }, { status: 400 });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("ElevenLabs webhook error:", error);
-    return NextResponse.json({ error: "Failed to process webhook" }, { status: 500 });
+    return NextResponse.json({ 
+      success: false,
+      message: ` I encountered an error: ${error.message || String(error)}. Please try again or rephrase your request.`,
+      error: "Failed to process webhook",
+      details: error.message || String(error),
+    }, { status: 500 });
   }
 }
 

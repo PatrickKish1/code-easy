@@ -4,12 +4,12 @@ This directory contains corrected JSON configurations for all four ElevenLabs ag
 
 ## Issues Fixed in Your Original JSON
 
-1. ❌ **Wrong URL**: `/webhooks/elevenlabs` → ✅ Fixed to `/api/webhooks/elevenlabs`
-2. ❌ **Incorrect schema structure**: `request_body_schema` had wrong format → ✅ Fixed to proper object structure
-3. ❌ **Properties as array**: Should be object with `additionalProperties` → ✅ Fixed
-4. ❌ **Tab characters**: Had `\t` in field names → ✅ Removed
-5. ❌ **Wrong field types**: `force_pre_tool_speech` was string "auto" → ✅ Fixed to boolean `false`
-6. ❌ **Empty arrays**: `path_params_schema` and `query_params_schema` were arrays → ✅ Fixed to objects or null
+1.  **Wrong URL**: `/webhooks/elevenlabs` → Fixed to `/api/webhooks/elevenlabs`
+2.  **Incorrect schema structure**: `request_body_schema` had wrong format → Fixed to proper object structure
+3.  **Properties as array**: Should be object with `additionalProperties` → Fixed
+4.  **Tab characters**: Had `\t` in field names → Removed
+5.  **Wrong field types**: `force_pre_tool_speech` was string "auto" → Fixed to boolean `false`
+6.  **Empty arrays**: `path_params_schema` and `query_params_schema` were arrays → Fixed to objects or null
 
 ## Files
 
