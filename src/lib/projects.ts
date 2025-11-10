@@ -1,6 +1,10 @@
+export type FileEncoding = "text" | "base64";
+
 export type ProjectFile = {
   path: string; // e.g., "src/index.ts"
   content: string;
+  encoding?: FileEncoding;
+  mimeType?: string;
 };
 
 export type Project = {
@@ -12,9 +16,14 @@ export type Project = {
   dirtyFiles?: string[];
   updatedAt: number;
   createdAt: number;
+  isPlayground?: boolean;
+  expiresAt?: number;
 };
 
 const STORAGE_KEY = "vibecoder.projects";
+const PLAYGROUND_STORAGE_KEY = "vibecoder.playground.projects";
+const PLAYGROUND_STORAGE_LIMIT_BYTES = 512 * 1024; // 512 KB cap for playground cache
+export const PLAYGROUND_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 export function generateUuid(): string {
   // Simple RFC4122 v4-ish UUID generator suitable for client-side
@@ -41,6 +50,60 @@ export function readProjectsFromStorage(): Project[] {
 export function writeProjectsToStorage(projects: Project[]): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+
+export function readPlaygroundProjects(now: number = Date.now()): Project[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(PLAYGROUND_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Project[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((project) => project.expiresAt && project.expiresAt > now)
+      .map((project) => ({ ...project, isPlayground: true }));
+  } catch {
+    return [];
+  }
+}
+
+function isQuotaExceeded(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { name?: string; code?: number };
+  return (
+    err.name === "QuotaExceededError" ||
+    err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    err.code === 22 ||
+    err.code === 1014
+  );
+}
+
+export function writePlaygroundProjects(projects: Project[]): boolean {
+  if (typeof window === "undefined") return true;
+
+  try {
+    const payload = JSON.stringify(projects);
+    const size = new Blob([payload]).size;
+    if (size > PLAYGROUND_STORAGE_LIMIT_BYTES) {
+      console.warn(
+        `[playground] Skipping cache write: payload size ${size} exceeds limit of ${PLAYGROUND_STORAGE_LIMIT_BYTES} bytes.`,
+      );
+      return false;
+    }
+    window.localStorage.setItem(PLAYGROUND_STORAGE_KEY, payload);
+    return true;
+  } catch (error) {
+    if (isQuotaExceeded(error)) {
+      console.warn("[playground] Skipping cache write due to storage quota limit.", error);
+      return false;
+    }
+    throw error;
+  }
+}
+
+export function pruneExpiredPlaygroundProjects(now: number = Date.now()): void {
+  const remaining = readPlaygroundProjects(now);
+  writePlaygroundProjects(remaining);
 }
 
 export function findProject(projects: Project[], id: string | undefined): Project | undefined {
@@ -70,6 +133,7 @@ export function createDefaultProject(name?: string): Project {
     dirtyFiles: [],
     createdAt: now,
     updatedAt: now,
+    isPlayground: false,
   };
 }
 
@@ -85,15 +149,27 @@ export function deleteProject(projects: Project[], id: string): Project[] {
   return projects.filter(p => p.id !== id);
 }
 
-export function upsertFile(project: Project, path: string, content: string): Project {
+export function upsertFile(
+  project: Project,
+  path: string,
+  content: string,
+  encoding?: FileEncoding,
+  mimeType?: string,
+): Project {
   // Ensure files array exists
   const existingFiles = project.files || [];
   const idx = existingFiles.findIndex(f => f.path === path);
   const files = [...existingFiles];
   if (idx === -1) {
-    files.push({ path, content });
+    files.push({ path, content, ...(encoding ? { encoding } : {}), ...(mimeType ? { mimeType } : {}) });
   } else {
-    files[idx] = { path, content };
+    const previous = existingFiles[idx];
+    files[idx] = {
+      path,
+      content,
+      encoding: encoding ?? previous.encoding,
+      mimeType: mimeType ?? previous.mimeType,
+    };
   }
   return { ...project, files, updatedAt: Date.now() };
 }
@@ -137,7 +213,16 @@ export function closeOpenFile(project: Project, path: string): Project {
 export function renameFile(project: Project, oldPath: string, newPath: string): Project {
   if (oldPath === newPath) return project;
   const existingFiles = project.files || [];
-  const files = existingFiles.map(f => f.path === oldPath ? { path: newPath, content: f.content } : f);
+  const files = existingFiles.map(f =>
+    f.path === oldPath
+      ? {
+          path: newPath,
+          content: f.content,
+          encoding: f.encoding,
+          mimeType: f.mimeType,
+        }
+      : f,
+  );
   const openFilePaths = (project.openFilePaths || []).map(p => p === oldPath ? newPath : p);
   const activeFilePath = project.activeFilePath === oldPath ? newPath : project.activeFilePath;
   return { ...project, files, openFilePaths, activeFilePath, updatedAt: Date.now() };
@@ -157,7 +242,16 @@ export function renameFolder(project: Project, oldPrefix: string, newPrefix: str
   const to = newPrefix.replace(/\\/g, "/").replace(/\/$/, "");
   if (from === to) return project;
   const existingFiles = project.files || [];
-  const files = existingFiles.map(f => f.path.startsWith(from + "/") ? { path: f.path.replace(from + "/", to + "/"), content: f.content } : f);
+  const files = existingFiles.map(f =>
+    f.path.startsWith(from + "/")
+      ? {
+          path: f.path.replace(from + "/", to + "/"),
+          content: f.content,
+          encoding: f.encoding,
+          mimeType: f.mimeType,
+        }
+      : f,
+  );
   const openFilePaths = (project.openFilePaths || []).map(p => p.startsWith(from + "/") ? p.replace(from + "/", to + "/") : p);
   const activeFilePath = project.activeFilePath && project.activeFilePath.startsWith(from + "/") ? project.activeFilePath.replace(from + "/", to + "/") : project.activeFilePath;
   const dirtyFiles = (project.dirtyFiles || []).map(p => p.startsWith(from + "/") ? p.replace(from + "/", to + "/") : p);
@@ -176,7 +270,8 @@ export function markClean(project: Project, path: string): Project {
 }
 
 export function saveFile(project: Project, path: string, content: string): Project {
-  const next = upsertFile(project, path, content);
+  const existing = (project.files || []).find(f => f.path === path);
+  const next = upsertFile(project, path, content, existing?.encoding, existing?.mimeType);
   return markClean(next, path);
 }
 

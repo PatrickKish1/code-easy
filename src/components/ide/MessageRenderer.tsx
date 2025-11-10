@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Editor } from "@monaco-editor/react";
-import { getFileIcon, getFileIconProps } from "@/lib/file-icons";
+import { getFileIconProps } from "@/lib/file-icons";
 import { cn } from "@/lib/utils";
 
 interface MessageRendererProps {
@@ -127,7 +127,7 @@ export function MessageRenderer({ content, codeActions }: MessageRendererProps) 
             if (!cleanText) return null;
             
             return (
-              <div key={idx} className="text-sm whitespace-pre-wrap break-words">
+              <div key={idx} className="text-sm whitespace-pre-wrap wrap-break-word">
                 {cleanText}
               </div>
             );
@@ -214,7 +214,7 @@ export function MessageRenderer({ content, codeActions }: MessageRendererProps) 
           if (!cleanText) return null;
           
           return (
-            <div key={idx} className="text-sm whitespace-pre-wrap break-words">
+            <div key={idx} className="text-sm whitespace-pre-wrap wrap-break-word">
               {cleanText}
             </div>
           );

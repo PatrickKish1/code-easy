@@ -2,15 +2,10 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-// Removed Orb import to avoid WebGL context issues - using a simple colored circle instead
 
 export interface Voice {
   voice_id: string;
@@ -40,8 +35,38 @@ export function VoicePicker({
   const [internalOpen, setInternalOpen] = React.useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = onOpenChange || setInternalOpen;
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const audioRefs = React.useRef<Record<string, HTMLAudioElement | null>>({});
 
   const selectedVoice = voices.find((v) => v.voice_id === value);
+
+  const filteredVoices = React.useMemo(() => {
+    if (!searchTerm.trim()) {
+      return voices;
+    }
+    const lower = searchTerm.trim().toLowerCase();
+    return voices.filter((voice) => voice.name.toLowerCase().includes(lower));
+  }, [voices, searchTerm]);
+
+  const handleAudioPlay = React.useCallback((voiceId: string) => {
+    Object.entries(audioRefs.current).forEach(([id, element]) => {
+      if (id !== voiceId && element) {
+        element.pause();
+      }
+    });
+  }, []);
+
+  const handleVoiceToggle = React.useCallback(
+    (voice: Voice, checked: boolean) => {
+      if (checked) {
+        onValueChange?.(voice.voice_id);
+        setOpen(false);
+      } else if (voice.voice_id === value) {
+        onValueChange?.("");
+      }
+    },
+    [onValueChange, setOpen, value],
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -56,40 +81,62 @@ export function VoicePicker({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search voices..." />
-          <CommandList>
-            <CommandEmpty>No voices found.</CommandEmpty>
-            {voices.map((voice) => (
-              <CommandItem
-                key={voice.voice_id}
-                value={voice.name}
-                onSelect={() => {
-                  onValueChange?.(voice.voice_id);
-                  setOpen(false);
-                }}
-                className="flex items-center gap-3"
-              >
-                <div className="h-12 w-12 rounded-full shrink-0 bg-linear-to-br from-purple-500 via-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold text-lg">
-                  {voice.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium">{voice.name}</div>
-                  {voice.preview_url && (
-                    <div className="text-xs text-muted-foreground">Has preview</div>
-                  )}
-                </div>
-                <Check
+      <PopoverContent className="w-[420px] p-3 space-y-3" align="start">
+        <Input
+          placeholder="Search voices..."
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+        />
+        <div className="max-h-72 overflow-y-auto pr-2 space-y-2">
+            {filteredVoices.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-6">
+                No voices found.
+              </div>
+            ) : (
+              filteredVoices.map((voice) => (
+                <div
+                  key={voice.voice_id}
                   className={cn(
-                    "h-4 w-4 shrink-0",
-                    value === voice.voice_id ? "opacity-100" : "opacity-0"
+                    "border border-transparent rounded-md p-2 hover:border-border transition-colors",
+                    value === voice.voice_id ? "bg-primary/5 border-primary/40" : "",
                   )}
-                />
-              </CommandItem>
-            ))}
-          </CommandList>
-        </Command>
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="h-12 w-12 rounded-full shrink-0 bg-linear-to-br from-purple-500 via-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold text-lg">
+                      {voice.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium leading-tight">{voice.name}</div>
+                      {voice.preview_url ? (
+                        <audio
+                          className="mt-2 w-full"
+                          preload="none"
+                          controls
+                          crossOrigin="anonymous"
+                          ref={(element) => {
+                            audioRefs.current[voice.voice_id] = element;
+                          }}
+                          onPlay={() => handleAudioPlay(voice.voice_id)}
+                          src={voice.preview_url}
+                        />
+                      ) : (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          No preview available
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+                      checked={value === voice.voice_id}
+                      onChange={(event) => handleVoiceToggle(voice, event.target.checked)}
+                      aria-label={`Select ${voice.name}`}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+        </div>
       </PopoverContent>
     </Popover>
   );

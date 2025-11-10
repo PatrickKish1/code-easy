@@ -33,7 +33,7 @@ export function ProjectSidebar({ projectName, files, activePath, onSelectFile, o
   }
 
   return (
-    <div className="h-full w-64 border-r flex flex-col">
+    <div className="h-full flex flex-col">
       <div className="px-3 py-2">
         <div className="font-semibold truncate">{projectName}</div>
       </div>

@@ -12,12 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Folder, File, Upload, CheckCircle2 } from "lucide-react";
-import { getFileIcon, getFileIconProps } from "@/lib/file-icons";
+import { getFileIconProps } from "@/lib/file-icons";
 
 interface FileItem {
   path: string;
   content: string;
   isFolder: boolean;
+  encoding?: "text" | "base64";
+  mimeType?: string;
 }
 
 interface FileUploadModalProps {
@@ -98,8 +100,14 @@ export function FileUploadModal({
   onCancel,
 }: FileUploadModalProps) {
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(
-    new Set(files.map((f) => f.path))
+    new Set(files.map((f) => f.path)),
   );
+
+  React.useEffect(() => {
+    if (open) {
+      setSelectedPaths(new Set(files.map((f) => f.path)));
+    }
+  }, [files, open]);
 
   const fileTree = useMemo(() => {
     return buildFileTree(files, selectedPaths);
@@ -182,24 +190,28 @@ export function FileUploadModal({
         >
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {node.isFolder ? (
-              <Folder className="h-4 w-4 text-blue-500 flex-shrink-0" />
+              <Folder className="h-4 w-4 text-blue-500 shrink-0" />
             ) : (
-              <div className="h-4 w-4 flex-shrink-0 relative flex items-center justify-center">
-                <img
-                  src={getFileIcon(node.path) as string}
-                  alt={getFileIconProps(node.path).alt}
-                  className="h-4 w-4 object-contain"
-                  onError={(e) => {
-                    // Fallback to file icon if image fails to load
-                    (e.target as HTMLImageElement).src = "/icons/file.svg";
-                  }}
-                />
+              <div className="h-4 w-4 shrink-0 relative flex items-center justify-center">
+                {(() => {
+                  const iconProps = getFileIconProps(node.path);
+                  return (
+                    <img
+                      src={iconProps.src}
+                      alt={iconProps.alt}
+                      className="h-4 w-4 object-contain"
+                      onError={(event) => {
+                        (event.target as HTMLImageElement).src = "/icons/file.svg";
+                      }}
+                    />
+                  );
+                })()}
               </div>
             )}
             <span className="text-sm truncate">{node.name}</span>
           </div>
           {isSelected && (
-            <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+            <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
           )}
         </div>
         {node.isFolder && node.children.length > 0 && (
@@ -211,7 +223,7 @@ export function FileUploadModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Preview Upload</DialogTitle>
           <DialogDescription>

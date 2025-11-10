@@ -30,6 +30,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "file-icons-js": "^1.1.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.552.0",
     "monaco-editor": "^0.54.0",
     "next": "16.0.1",
@@ -41,7 +43,8 @@
     "react-dom": "19.2.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "vscode-icons-js": "^11.6.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",

@@ -18,6 +18,12 @@ import {
   renameFolder,
   markDirty,
   saveFile,
+  createDefaultProject,
+  generateUuid,
+  readPlaygroundProjects,
+  writePlaygroundProjects,
+  upsertProject,
+  PLAYGROUND_TTL,
 } from "@/lib/projects";
 
 export default function ProjectPage() {
@@ -29,8 +35,109 @@ export default function ProjectPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [isCalling, setIsCalling] = useState(false);
+  const sidebarWidthPrefKey = "vibecoder.sidebarWidth";
+  const sidebarMinWidth = 220;
+  const sidebarMaxWidth = 480;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 256;
+    const stored = window.localStorage.getItem(sidebarWidthPrefKey);
+    const parsed = stored ? parseInt(stored, 10) : NaN;
+    if (!Number.isFinite(parsed)) {
+      return 256;
+    }
+    return Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, parsed));
+  });
 
-  const loadProjectFiles = useCallback(async (projectId: string): Promise<Project['files']> => {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(sidebarWidthPrefKey, String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!isPlayground) {
+      return;
+    }
+
+    const stored = readPlaygroundProjects();
+    const normalized = stored.map((proj) => ({
+      ...proj,
+      files: proj.files || [],
+      openFilePaths: proj.openFilePaths || [],
+      dirtyFiles: proj.dirtyFiles || [],
+      isPlayground: true,
+    }));
+
+    if (normalized.length === 0) {
+      const baseId =
+        projectId && projectId.startsWith("playground-")
+          ? projectId
+          : `playground-${generateUuid()}`;
+      const fresh = createDefaultProject("Playground");
+      const seeded: Project = {
+        ...fresh,
+        id: baseId,
+        files: [],
+        activeFilePath: undefined,
+        openFilePaths: [],
+        dirtyFiles: [],
+        isPlayground: true,
+        updatedAt: Date.now(),
+        expiresAt: Date.now() + PLAYGROUND_TTL,
+      };
+      writePlaygroundProjects([seeded]);
+      setProjects([seeded]);
+      setProject(seeded);
+      if (projectId !== baseId) {
+        router.replace(`/${baseId}`);
+      }
+      return;
+    }
+
+    const sorted = [...normalized].sort((a, b) => b.updatedAt - a.updatedAt);
+    const targetId =
+      projectId && projectId.startsWith("playground-") ? projectId : sorted[0].id;
+    const target = sorted.find((proj) => proj.id === targetId) || sorted[0];
+
+    setProjects(sorted);
+    setProject(target);
+    writePlaygroundProjects(
+      sorted.map((proj) => ({
+        ...proj,
+        isPlayground: true,
+        expiresAt: proj.expiresAt ?? Date.now() + PLAYGROUND_TTL,
+      })),
+    );
+
+    if (target && projectId !== target.id) {
+      router.replace(`/${target.id}`);
+    }
+  }, [isPlayground, projectId, router]);
+
+  const handleSidebarResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const next = Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, startWidth + delta));
+      setSidebarWidth(next);
+    };
+
+    const handlePointerUp = () => {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }, [sidebarWidth, sidebarMinWidth, sidebarMaxWidth]);
+
+  const loadProjectFiles = useCallback(async (projectId: string): Promise<Project["files"]> => {
     if (isPlayground) {
       return [];
     }
@@ -52,6 +159,8 @@ export default function ProjectPage() {
           .map((f: any) => ({
             path: f.path,
             content: f.content || "",
+            encoding: f.encoding,
+            mimeType: f.mimeType,
           }));
       }
       return [];
@@ -207,46 +316,97 @@ export default function ProjectPage() {
 
   const persist = useCallback(
     (next: Project) => {
-      setProject(next);
-      // Update projects list using functional update to avoid dependency
-      setProjects(prev => prev.map(p => p.id === next.id ? next : p));
-      
-      // Only sync to Appwrite if not playground and user is authenticated
-      if (!isPlayground && user?.id && !next.id.startsWith("playground-")) {
-        // Sync to Appwrite - update project metadata (don't include files or timestamps)
-        // Fire and forget - don't block UI updates if sync fails
+      const isLocal = isPlayground || next.id.startsWith("playground-");
+      const normalized: Project = isLocal
+        ? {
+            ...next,
+            isPlayground: true,
+            expiresAt: Date.now() + PLAYGROUND_TTL,
+          }
+        : next;
+
+      setProject(normalized);
+      setProjects((prev) => {
+        const updated = upsertProject(prev, normalized);
+
+        if (isLocal) {
+          const stored = updated.map((proj) => ({
+            ...proj,
+            isPlayground: true,
+            expiresAt: proj.expiresAt ?? Date.now() + PLAYGROUND_TTL,
+            files: proj.files || [],
+            openFilePaths: proj.openFilePaths || [],
+            dirtyFiles: proj.dirtyFiles || [],
+          }));
+          writePlaygroundProjects(stored);
+          return stored;
+        }
+
+        return updated;
+      });
+
+      if (!isLocal && user?.id) {
         fetch("/api/projects", {
           method: "PUT",
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
             ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
           },
           body: JSON.stringify({
-            id: next.id,
-            name: next.name,
-            activeFilePath: next.activeFilePath || null,
-            openFilePaths: next.openFilePaths || [],
-            dirtyFiles: next.dirtyFiles || [],
+            id: normalized.id,
+            name: normalized.name,
+            activeFilePath: normalized.activeFilePath || null,
+            openFilePaths: normalized.openFilePaths || [],
+            dirtyFiles: normalized.dirtyFiles || [],
+          }),
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+              console.error("Failed to sync project to Appwrite:", response.status, errorData);
+            }
           })
-        })
-        .then(async (response) => {
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-            console.error("Failed to sync project to Appwrite:", response.status, errorData);
-          }
-        })
-        .catch(error => {
-          console.error("Failed to sync project to Appwrite (network error):", error);
-          // Don't throw - allow UI to continue working even if sync fails
-        });
+          .catch((error) => {
+            console.error("Failed to sync project to Appwrite (network error):", error);
+          });
       }
     },
-    [isPlayground, user?.id, sessionToken]
+    [isPlayground, sessionToken, user?.id],
   );
 
   async function handleCreateProject() {
+    if (isPlayground) {
+      const fresh = createDefaultProject("Playground Project");
+      const newId = `playground-${generateUuid()}`;
+      const normalized: Project = {
+        ...fresh,
+        id: newId,
+        files: [],
+        activeFilePath: undefined,
+        openFilePaths: [],
+        dirtyFiles: [],
+        isPlayground: true,
+        updatedAt: Date.now(),
+        expiresAt: Date.now() + PLAYGROUND_TTL,
+      };
+
+      setProject(normalized);
+      setProjects((prev) => {
+        const updated = upsertProject(prev, normalized);
+        const stored = updated.map((proj) => ({
+          ...proj,
+          isPlayground: true,
+          expiresAt: proj.expiresAt ?? Date.now() + PLAYGROUND_TTL,
+        }));
+        writePlaygroundProjects(stored);
+        return stored;
+      });
+      router.push(`/${newId}`);
+      return;
+    }
+
     if (!user?.id) {
-      // Prompt login if not authenticated
+      setLoginDialogOpen(true);
       return;
     }
 
@@ -318,7 +478,7 @@ export default function ProjectPage() {
 
   async function handleCreateFile(path: string) {
     if (!project) return;
-    const next = upsertFile(project, path, "");
+    const next = upsertFile(project, path, "", "text");
     persist({ ...next, activeFilePath: path });
     if (!isPlayground && user?.id) {
       try {
@@ -400,7 +560,11 @@ export default function ProjectPage() {
 
   function handleChangeCode(code: string) {
     if (!project || !project.activeFilePath) return;
-    const next = markDirty(upsertFile(project, project.activeFilePath, code), project.activeFilePath);
+    const existing = project.files.find(f => f.path === project.activeFilePath);
+    const next = markDirty(
+      upsertFile(project, project.activeFilePath, code, existing?.encoding ?? "text", existing?.mimeType),
+      project.activeFilePath,
+    );
     persist(next);
     // Auto-save to Appwrite in real-time (only for authenticated users)
     if (!isPlayground && user?.id) {
@@ -466,7 +630,7 @@ export default function ProjectPage() {
       case "create":
         if (action.content) {
           console.log("Creating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
-          const next = upsertFile(project, action.path, action.content);
+          const next = upsertFile(project, action.path, action.content, "text");
           persist({ ...next, activeFilePath: action.path });
           if (!isPlayground && user?.id) {
             try {
@@ -495,7 +659,8 @@ export default function ProjectPage() {
       case "update":
         if (action.content) {
           console.log("Updating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
-          const next = upsertFile(project, action.path, action.content);
+          const existing = project.files.find((f) => f.path === action.path);
+          const next = upsertFile(project, action.path, action.content, existing?.encoding ?? "text", existing?.mimeType);
           persist(next);
           if (!isPlayground && user?.id) {
             try {
@@ -550,7 +715,8 @@ export default function ProjectPage() {
 
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
-  const handleFilesUploaded = useCallback((files: Array<{ path: string; content: string; isFolder: boolean }>) => {
+  const handleFilesUploaded = useCallback(
+    (files: Array<{ path: string; content: string; isFolder: boolean; encoding?: "text" | "base64"; mimeType?: string }>) => {
     if (!project) return;
     
     // Add folders first
@@ -561,9 +727,11 @@ export default function ProjectPage() {
     });
     
     // Then add files
-    files.filter(f => !f.isFolder).forEach(f => {
-      updated = upsertFile(updated, f.path, f.content);
-    });
+    files
+      .filter(f => !f.isFolder)
+      .forEach(f => {
+        updated = upsertFile(updated, f.path, f.content, f.encoding, f.mimeType);
+      });
     
     persist(updated);
   }, [project, persist]);
@@ -601,7 +769,10 @@ export default function ProjectPage() {
       />
       <LoginDialog open={loginDialogOpen} onOpenChange={setLoginDialogOpen} />
       <div className="flex flex-1 min-h-0">
-        <div className="w-64 border-r flex flex-col">
+        <div
+          className="relative border-r flex flex-col"
+          style={{ width: sidebarWidth, minWidth: sidebarMinWidth, maxWidth: sidebarMaxWidth }}
+        >
           <ProjectSidebar
             projectName={project?.name || "Project"}
             files={project?.files || []}
@@ -615,6 +786,10 @@ export default function ProjectPage() {
           <div className="border-t p-4">
             <FileUpload onFilesUploaded={handleFilesUploaded} projectId={project?.id} />
           </div>
+          <div
+            className="absolute top-0 right-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/40 transition-colors"
+            onPointerDown={handleSidebarResizeStart}
+          />
         </div>
         <div className="flex-1 grid grid-cols-[1fr_360px] min-h-0">
           <div className="border-r min-h-0">
@@ -632,6 +807,8 @@ export default function ProjectPage() {
             <CodeEditor
               path={activeFile?.path}
               value={activeFile?.content ?? ""}
+              encoding={activeFile?.encoding}
+              mimeType={activeFile?.mimeType}
               onChange={handleChangeCode}
               onSave={handleSave}
             />
@@ -646,6 +823,8 @@ export default function ProjectPage() {
               projectFiles={project?.files}
               selectedCode={activeFile?.content}
               projectId={project.id}
+              userId={user?.id}
+              isPlaygroundProject={project?.isPlayground}
             />
           </div>
         </div>

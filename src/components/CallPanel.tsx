@@ -15,6 +15,80 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Phone, MessageSquare, Settings, Mic, MicOff } from "lucide-react";
 import { useConversation } from "@elevenlabs/react";
 import { useMemo } from "react";
+import { toast } from "sonner";
+
+function stripGeneratedHeader(filename: string | undefined, content: string | undefined): string {
+  if (!content) {
+    return "";
+  }
+
+  const lines = content.split(/\r?\n/);
+  let index = 0;
+
+  // Skip initial blank lines
+  while (index < lines.length && lines[index].trim() === "") {
+    index++;
+  }
+
+  if (index >= lines.length) {
+    return "";
+  }
+
+  const lowerFilename = filename?.toLowerCase() ?? "";
+  const headerLines: string[] = [];
+  let cursor = index;
+  let consumed = false;
+
+  const captureCommentBlock = () => {
+    while (cursor < lines.length && lines[cursor].trim().startsWith("//")) {
+      headerLines.push(lines[cursor]);
+      cursor++;
+    }
+    consumed = headerLines.length > 0;
+  };
+
+  const captureBlockComment = () => {
+    headerLines.push(lines[cursor]);
+    cursor++;
+    while (cursor < lines.length && !lines[cursor].includes("*/")) {
+      headerLines.push(lines[cursor]);
+      cursor++;
+    }
+    if (cursor < lines.length) {
+      headerLines.push(lines[cursor]);
+      cursor++;
+      consumed = true;
+    }
+  };
+
+  const trimmed = lines[cursor]?.trim() ?? "";
+  if (trimmed.startsWith("//")) {
+    captureCommentBlock();
+  } else if (trimmed.startsWith("/*")) {
+    captureBlockComment();
+  }
+
+  if (!consumed) {
+    return content;
+  }
+
+  const headerText = headerLines.join("\n").toLowerCase();
+  const shouldStrip =
+    (lowerFilename && headerText.includes(lowerFilename)) ||
+    headerText.includes("this file") ||
+    headerText.includes("script prints") ||
+    headerText.includes("basic console log");
+
+  if (!shouldStrip) {
+    return content;
+  }
+
+  while (cursor < lines.length && lines[cursor].trim() === "") {
+    cursor++;
+  }
+
+  return lines.slice(cursor).join("\n");
+}
 
 type CallPanelProps = {
   onStart: () => void;
@@ -25,25 +99,87 @@ type CallPanelProps = {
   projectFiles?: Array<{ path: string; content: string }>;
   selectedCode?: string;
   projectId?: string;
+  userId?: string;
+  isPlaygroundProject?: boolean;
 };
 
-export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile, projectFiles, selectedCode, projectId }: CallPanelProps) {
+export function CallPanel({
+  onStart,
+  onEnd,
+  isActive,
+  onCodeAction,
+  currentFile,
+  projectFiles,
+  selectedCode,
+  projectId,
+  userId,
+  isPlaygroundProject,
+}: CallPanelProps) {
   const [orbType, setOrbType] = React.useState("shader");
   const [selectedMic, setSelectedMic] = React.useState<string>("");
   const [isMuted, setIsMuted] = React.useState(true); // Start muted by default
   const [selectedVoice, setSelectedVoice] = React.useState<string>("");
   const [voices, setVoices] = React.useState<Voice[]>([]);
   const [loadingVoices, setLoadingVoices] = React.useState(false);
-  // Separate stream ref for persistent mic preview (starts disabled)
   const previewMicStreamRef = React.useRef<MediaStream | null>(null);
   const [showPreviewWaveform, setShowPreviewWaveform] = React.useState(false);
   const [previewMicEnabled, setPreviewMicEnabled] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const sessionOverrides = React.useMemo(
+    () => (selectedVoice ? { tts: { voiceId: selectedVoice } } : undefined),
+    [selectedVoice]
+  );
+  const conversationUserId = React.useMemo(() => userId || projectId || "anonymous", [userId, projectId]);
+  const isLocalProject = React.useMemo(() => {
+    if (isPlaygroundProject) return true;
+    if (!projectId) return false;
+    return projectId.startsWith("playground-");
+  }, [projectId, isPlaygroundProject]);
+
+  const handleVoiceSelection = React.useCallback(
+    async (voiceId: string) => {
+      if (voiceId === selectedVoice) {
+        return;
+      }
+
+      const previousVoice = selectedVoice;
+      setSelectedVoice(voiceId);
+
+      if (!voiceId) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/voices/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ voiceId }),
+        });
+
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => ({}));
+          const message =
+            errorPayload?.error ||
+            errorPayload?.message ||
+            `Failed to update voice: ${response.statusText}`;
+          throw new Error(message);
+        }
+
+        toast.success("Voice preference updated with ElevenLabs.");
+      } catch (error) {
+        console.error("Failed to update ElevenLabs voice:", error);
+        setSelectedVoice(previousVoice);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to update voice. Reverting to previous selection.",
+        );
+      }
+    },
+    [selectedVoice],
+  );
   
-  // Memoize client tools to prevent recreation on every render (which causes disconnections)
   const clientTools = useMemo(() => ({
-      // Generate code using AI
-      // This tool is ONLY executed when the agent explicitly calls it - lazy execution, not "rendered"
       generateCode: async ({ request, language, context }: { request: string; language: string; context?: string }): Promise<any> => {
         try {
           console.log('[Client Tool] generateCode called:', { request: request.substring(0, 50) + '...', language, hasContext: !!context });
@@ -73,8 +209,9 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
           
           // Extract code from the first code action, or use the message as fallback
           const codeAction = data.codeActions?.[0];
-          const code = codeAction?.content || '';
+          const rawCode = codeAction?.content || '';
           const filename = codeAction?.path || `main.${language === 'typescript' ? 'ts' : language === 'javascript' ? 'js' : language}`;
+          const code = stripGeneratedHeader(filename, rawCode);
           const description = codeAction?.description || data.message || 'Generated code';
 
           console.log('[Client Tool] generateCode success:', { filename, codeLength: code.length });
@@ -102,9 +239,25 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       // Create a new file
       createFile: async ({ filename, content }: { filename: string; content: string }): Promise<any> => {
         try {
+          if (isLocalProject) {
+            const sanitizedContent = stripGeneratedHeader(filename, content);
+            onCodeAction?.({
+              type: 'create',
+              path: filename,
+              content: sanitizedContent,
+              description: 'Created via voice assistant',
+            });
+            return {
+              success: true,
+              message: `File ${filename} created successfully`,
+            };
+          }
+
           if (!projectId) {
             throw new Error('Project ID is required');
           }
+
+          const sanitizedContent = stripGeneratedHeader(filename, content);
 
           const response = await fetch('/api/files', {
             method: 'POST',
@@ -112,8 +265,9 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
             body: JSON.stringify({
               action: 'create',
               path: filename,
-              content,
+              content: sanitizedContent,
               projectId,
+              ...(userId ? { userId } : {}),
             }),
           });
 
@@ -123,6 +277,12 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
           }
 
           const data = await response.json();
+          onCodeAction?.({
+            type: 'create',
+            path: filename,
+            content: sanitizedContent,
+            description: 'Created via voice assistant',
+          });
           return {
             success: true,
             message: `File ${filename} created successfully`,
@@ -140,9 +300,25 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       // Update an existing file
       updateFile: async ({ filename, content }: { filename: string; content: string }): Promise<any> => {
         try {
+          if (isLocalProject) {
+            const sanitizedContent = stripGeneratedHeader(filename, content);
+            onCodeAction?.({
+              type: 'update',
+              path: filename,
+              content: sanitizedContent,
+              description: 'Updated via voice assistant',
+            });
+            return {
+              success: true,
+              message: `File ${filename} updated successfully`,
+            };
+          }
+
           if (!projectId) {
             throw new Error('Project ID is required');
           }
+
+          const sanitizedContent = stripGeneratedHeader(filename, content);
 
           const response = await fetch('/api/files', {
             method: 'POST',
@@ -150,8 +326,9 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
             body: JSON.stringify({
               action: 'update',
               path: filename,
-              content,
+              content: sanitizedContent,
               projectId,
+              ...(userId ? { userId } : {}),
             }),
           });
 
@@ -161,6 +338,12 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
           }
 
           const data = await response.json();
+          onCodeAction?.({
+            type: 'update',
+            path: filename,
+            content: sanitizedContent,
+            description: 'Updated via voice assistant',
+          });
           return {
             success: true,
             message: `File ${filename} updated successfully`,
@@ -178,6 +361,18 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       // Delete a file
       deleteFile: async ({ filename }: { filename: string }): Promise<any> => {
         try {
+          if (isLocalProject) {
+            onCodeAction?.({
+              type: 'delete',
+              path: filename,
+              description: 'Deleted via voice assistant',
+            });
+            return {
+              success: true,
+              message: `File ${filename} deleted successfully`,
+            };
+          }
+
           if (!projectId) {
             throw new Error('Project ID is required');
           }
@@ -189,6 +384,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
               action: 'delete',
               path: filename,
               projectId,
+              ...(userId ? { userId } : {}),
             }),
           });
 
@@ -197,6 +393,11 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
             throw new Error(errorData.error || `Failed to delete file: ${response.statusText}`);
           }
 
+          onCodeAction?.({
+            type: 'delete',
+            path: filename,
+            description: 'Deleted via voice assistant',
+          });
           return {
             success: true,
             message: `File ${filename} deleted successfully`,
@@ -213,11 +414,36 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       // Get project files or read a specific file
       getProjectFiles: async ({ path }: { path?: string }): Promise<any> => {
         try {
+          if (isLocalProject) {
+            const files = projectFiles || [];
+            if (path) {
+              const file = files.find((f) => f.path === path);
+              if (file) {
+                return {
+                  success: true,
+                  files: [file],
+                  content: file.content,
+                  path: file.path,
+                };
+              }
+              return {
+                success: false,
+                message: `File ${path} not found`,
+              };
+            }
+
+            return {
+              success: true,
+              files,
+              count: files.length,
+            };
+          }
+
           if (!projectId) {
             throw new Error('Project ID is required');
           }
 
-          const url = `/api/files?projectId=${encodeURIComponent(projectId)}${path ? `&path=${encodeURIComponent(path)}` : ''}`;
+          const url = `/api/files?projectId=${encodeURIComponent(projectId)}${userId ? `&userId=${encodeURIComponent(userId)}` : ''}${path ? `&path=${encodeURIComponent(path)}` : ''}`;
           const response = await fetch(url, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
@@ -262,7 +488,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
           };
         }
       },
-  }), [projectId]); // Only recreate if projectId changes
+  }), [projectId, userId, onCodeAction, isLocalProject, projectFiles]); // Recreate if project or user context or handler changes
 
   // Track if we're currently connecting to avoid race conditions
   const isConnectingRef = React.useRef(false);
@@ -347,6 +573,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       // Only log the error, the conversation should continue
     },
     clientTools,
+    ...(sessionOverrides ? { overrides: sessionOverrides } : {}),
   });
 
   // Fetch voices on mount
@@ -424,7 +651,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       const agentId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID;
       if (!agentId) {
         console.error('ElevenLabs Agent ID not configured');
-        alert('ElevenLabs Agent ID is not configured. Please set NEXT_PUBLIC_ELEVENLABS_AGENT_ID in your environment variables.');
+        toast.error('ElevenLabs Agent ID is not configured. Please set NEXT_PUBLIC_ELEVENLABS_AGENT_ID in your environment variables.');
         isConnectingRef.current = false;
         return;
       }
@@ -444,7 +671,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
         console.log('Microphone permission granted');
       } catch (micError: any) {
         console.error('Microphone permission denied:', micError);
-        alert('Microphone access is required for voice conversations. Please grant permission and try again.');
+        toast.error('Microphone access is required for voice conversations. Please grant permission and try again.');
         isConnectingRef.current = false;
         return;
       }
@@ -472,7 +699,8 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
         const sessionResult = await conversation.startSession({
           agentId: agentId,
           connectionType: connectionType,
-          userId: projectId || 'anonymous',
+          userId: conversationUserId,
+          ...(sessionOverrides ? { overrides: sessionOverrides } : {}),
         });
         console.log('startSession returned:', sessionResult);
         
@@ -503,7 +731,8 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
           const fallbackResult = await conversation.startSession({
             agentId: agentId,
             connectionType: fallbackType,
-            userId: projectId || 'anonymous',
+            userId: conversationUserId,
+            ...(sessionOverrides ? { overrides: sessionOverrides } : {}),
           });
           console.log('Fallback connection succeeded:', fallbackResult);
         } catch (fallbackError: any) {
@@ -518,7 +747,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
           
           isConnectingRef.current = false;
           const errorMessage = fallbackError?.message || connectionError?.message || 'Unknown error';
-          alert(`Failed to start conversation with both connection types. Error: ${errorMessage}. Please check your internet connection and try again.`);
+          toast.error(`Failed to start conversation with both connection types. Error: ${errorMessage}. Please check your internet connection and try again.`);
           throw fallbackError;
         }
       }
@@ -526,9 +755,9 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
       console.error('Failed to start conversation:', error);
       isConnectingRef.current = false;
       const errorMessage = error?.message || 'Unknown error';
-      alert(`Failed to start conversation: ${errorMessage}. Please check your internet connection and try again.`);
+      toast.error(`Failed to start conversation: ${errorMessage}. Please check your internet connection and try again.`);
     }
-  }, [conversation, projectId, selectedMic, isMuted]);
+  }, [conversation, projectId, selectedMic, isMuted, sessionOverrides, conversationUserId]);
 
   // End conversation handler
   const handleEndConversation = React.useCallback(async () => {
@@ -620,7 +849,7 @@ export function CallPanel({ onStart, onEnd, isActive, onCodeAction, currentFile,
                               <VoicePicker
                                 voices={voices}
                                 value={selectedVoice}
-                                onValueChange={setSelectedVoice}
+                                onValueChange={handleVoiceSelection}
                                 placeholder="Select voice (optional)"
                               />
                             </>

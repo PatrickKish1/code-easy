@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { TopBar, ProjectSidebar, CodeEditor, TabsBar } from "@/components/ide";
 import { CallPanel } from "@/components/CallPanel";
 import { FileUpload } from "@/components/FileUpload";
@@ -19,6 +19,11 @@ import {
   renameFolder,
   markDirty,
   saveFile,
+  generateUuid,
+  readPlaygroundProjects,
+  writePlaygroundProjects,
+  pruneExpiredPlaygroundProjects,
+  PLAYGROUND_TTL,
 } from "@/lib/projects";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 export default function Home() {
   const router = useRouter();
@@ -40,38 +46,58 @@ export default function Home() {
   const [project, setProject] = useState<Project | null>(null);
   const [isCalling, setIsCalling] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [playgroundSessionId] = useState(() => `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`);
-  
-  // Playground mode: clear files on refresh - always start fresh
-  useEffect(() => {
-    if (isPlayground) {
-      // Always start with a fresh, empty project in playground mode
-      const emptyProject = createDefaultProject("Playground");
-      emptyProject.id = playgroundSessionId;
-      emptyProject.files = [];
-      setProject(emptyProject);
-      setProjects([emptyProject]);
-      
-      // Clear any old playground sessions from localStorage on page load
-      // This ensures fresh start each time
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith("playground-")) {
-          localStorage.removeItem(key);
-        }
-      });
-    }
-  }, [isPlayground, playgroundSessionId]);
+  const sidebarWidthPrefKey = "vibecoder.sidebarWidth";
+  const sidebarMinWidth = 220;
+  const sidebarMaxWidth = 480;
+  const quotaWarningShownRef = useRef(false);
 
-  // Save playground state to localStorage (session-only, cleared on refresh)
-  useEffect(() => {
-    if (isPlayground && project && playgroundSessionId) {
-      const key = `playground-${playgroundSessionId}`;
-      // Use sessionStorage instead of localStorage for playground - clears on tab close
-      // But for now, we'll clear it on each page load anyway (see useEffect above)
-      // This allows working within a session but fresh start on refresh
-      sessionStorage.setItem(key, JSON.stringify(project));
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 256;
+    const stored = window.localStorage.getItem(sidebarWidthPrefKey);
+    const parsed = stored ? parseInt(stored, 10) : NaN;
+    if (!Number.isFinite(parsed)) {
+      return 256;
     }
-  }, [isPlayground, project, playgroundSessionId]);
+    return Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, parsed));
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(sidebarWidthPrefKey, String(sidebarWidth));
+  }, [sidebarWidth]);
+  useEffect(() => {
+    if (!isPlayground) {
+      return;
+    }
+
+    pruneExpiredPlaygroundProjects();
+    const stored = readPlaygroundProjects();
+
+    if (stored.length > 0) {
+      const sorted = [...stored].sort((a, b) => b.updatedAt - a.updatedAt);
+      setProjects(sorted);
+      setProject(sorted[0]);
+      return;
+    }
+
+    const fresh = createDefaultProject("Playground");
+    fresh.id = `playground-${generateUuid()}`;
+    fresh.files = [];
+    fresh.activeFilePath = undefined;
+    fresh.openFilePaths = [];
+    fresh.isPlayground = true;
+    fresh.expiresAt = Date.now() + PLAYGROUND_TTL;
+
+    const success = writePlaygroundProjects([fresh]);
+    if (!success && !quotaWarningShownRef.current) {
+      quotaWarningShownRef.current = true;
+      toast.warning(
+        "Playground session is too large to autosave. We'll keep it in memory for now, but it won't persist after refresh.",
+      );
+    }
+    setProjects([fresh]);
+    setProject(fresh);
+  }, [isPlayground]);
 
   // Load projects when auth state changes
   useEffect(() => {
@@ -218,50 +244,112 @@ export default function Home() {
   }, [project]);
   const openTabs = project?.openFilePaths || (project?.activeFilePath ? [project.activeFilePath] : []);
 
+  const handleSidebarResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const next = Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, startWidth + delta));
+      setSidebarWidth(next);
+    };
+
+    const handlePointerUp = () => {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }, [sidebarWidth, sidebarMaxWidth, sidebarMinWidth]);
+
   async function persist(next: Project) {
-    setProject(next);
-    const updated = upsertProject(projects, next);
+    if (isPlayground) {
+      const withMeta: Project = {
+        ...next,
+        isPlayground: true,
+        expiresAt: Date.now() + PLAYGROUND_TTL,
+      };
+
+      setProject(withMeta);
+
+      const existing = readPlaygroundProjects();
+      const updated = upsertProject(existing, withMeta).map((proj) =>
+        proj.id === withMeta.id ? withMeta : { ...proj, isPlayground: true },
+      );
+      const sorted = updated.sort((a, b) => b.updatedAt - a.updatedAt);
+      setProjects(sorted);
+      const success = writePlaygroundProjects(sorted);
+      if (!success && !quotaWarningShownRef.current) {
+        quotaWarningShownRef.current = true;
+        toast.warning(
+          "Playground session is too large to autosave. We'll keep it in memory for now, but it won't persist after refresh.",
+        );
+      }
+      return;
+    }
+
+    const normalized: Project = { ...next, isPlayground: false, expiresAt: undefined };
+    setProject(normalized);
+
+    const updated = upsertProject(projects, normalized);
     setProjects(updated);
+    writeProjectsToStorage(updated);
     
-    // Only persist to storage/server if not playground
-    if (!isPlayground) {
-      writeProjectsToStorage(updated);
-      
-      // Sync to Appwrite (only for authenticated users)
-      if (user?.id && !next.id.startsWith("playground-")) {
-        try {
-          await fetch("/api/projects", {
-            method: "PUT",
-            headers: { 
-              "Content-Type": "application/json",
-              ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-            },
-            body: JSON.stringify({ 
-              id: next.id,
-              name: next.name,
-              activeFilePath: next.activeFilePath,
-              openFilePaths: next.openFilePaths,
-              dirtyFiles: next.dirtyFiles,
-            })
-          });
-        } catch (error) {
-          console.error("Failed to sync project to Appwrite:", error);
-        }
+    if (user?.id) {
+      try {
+        await fetch("/api/projects", {
+          method: "PUT",
+          headers: { 
+            "Content-Type": "application/json",
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          },
+          body: JSON.stringify({ 
+            id: normalized.id,
+            name: normalized.name,
+            activeFilePath: normalized.activeFilePath,
+            openFilePaths: normalized.openFilePaths,
+            dirtyFiles: normalized.dirtyFiles,
+          })
+        });
+      } catch (error) {
+        console.error("Failed to sync project to Appwrite:", error);
       }
     }
   }
 
   async function handleCreateProject() {
     if (isPlayground) {
-      // For playground, create a new session-based project
-      const newSessionId = `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      const p = createDefaultProject("Playground");
-      p.id = newSessionId;
-      p.files = [];
-      const updated = [p, ...projects];
-      setProjects(updated);
-      setProject(p);
-      router.push(`/${p.id}`);
+      const newSessionId = `playground-${generateUuid()}`;
+      const fresh = createDefaultProject("Playground");
+      fresh.id = newSessionId;
+      fresh.files = [];
+      fresh.activeFilePath = undefined;
+      fresh.openFilePaths = [];
+      fresh.isPlayground = true;
+      fresh.expiresAt = Date.now() + PLAYGROUND_TTL;
+
+      const existing = readPlaygroundProjects();
+      const updatedList = upsertProject(existing, fresh).map((proj) =>
+        proj.id === fresh.id ? fresh : { ...proj, isPlayground: true },
+      );
+      const sorted = updatedList.sort((a, b) => b.updatedAt - a.updatedAt);
+
+      const success = writePlaygroundProjects(sorted);
+      if (!success && !quotaWarningShownRef.current) {
+        quotaWarningShownRef.current = true;
+        toast.warning(
+          "Playground session is too large to autosave. We'll keep it in memory for now, but it won't persist after refresh.",
+        );
+      }
+      setProjects(sorted);
+      setProject(fresh);
+      router.push(`/${fresh.id}`);
       return;
     }
 
@@ -292,7 +380,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Failed to create project:", error);
-      alert("Failed to create project. Please try again.");
+    toast.error("Failed to create project. Please try again.");
     }
   }
 
@@ -340,7 +428,7 @@ export default function Home() {
 
   async function handleCreateFile(path: string) {
     if (!project) return;
-    const next = upsertFile(project, path, "");
+    const next = upsertFile(project, path, "", "text");
     persist({ ...next, activeFilePath: path });
     if (!isPlayground && user?.id) {
       try {
@@ -412,7 +500,11 @@ export default function Home() {
 
   async function handleChangeCode(code: string) {
     if (!project || !project.activeFilePath) return;
-    const next = markDirty(upsertFile(project, project.activeFilePath, code), project.activeFilePath);
+    const existing = project.files?.find((f) => f.path === project.activeFilePath);
+    const next = markDirty(
+      upsertFile(project, project.activeFilePath, code, existing?.encoding ?? "text", existing?.mimeType),
+      project.activeFilePath,
+    );
     persist(next);
     if (!isPlayground && user?.id) {
       try {
@@ -451,7 +543,7 @@ export default function Home() {
       case "create":
         if (action.content) {
           console.log("Creating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
-          const next = upsertFile(project, action.path, action.content);
+          const next = upsertFile(project, action.path, action.content, "text");
           persist({ ...next, activeFilePath: action.path });
           if (!isPlayground && user?.id) {
             try {
@@ -478,7 +570,8 @@ export default function Home() {
       case "update":
         if (action.content) {
           console.log("Updating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
-          const next = upsertFile(project, action.path, action.content);
+          const existing = project.files?.find((f) => f.path === action.path);
+          const next = upsertFile(project, action.path, action.content, existing?.encoding ?? "text", existing?.mimeType);
           persist(next);
           if (!isPlayground && user?.id) {
             try {
@@ -527,7 +620,8 @@ export default function Home() {
     }
   }
 
-  const handleFilesUploaded = useCallback((files: Array<{ path: string; content: string; isFolder: boolean }>) => {
+  const handleFilesUploaded = useCallback(
+    (files: Array<{ path: string; content: string; isFolder: boolean; encoding?: "text" | "base64"; mimeType?: string }>) => {
     if (!project) return;
     
     // Add folders first
@@ -538,9 +632,11 @@ export default function Home() {
     });
     
     // Then add files
-    files.filter(f => !f.isFolder).forEach(f => {
-      updated = upsertFile(updated, f.path, f.content);
-    });
+    files
+      .filter(f => !f.isFolder)
+      .forEach(f => {
+        updated = upsertFile(updated, f.path, f.content, f.encoding, f.mimeType);
+      });
     
     persist(updated);
   }, [project]);
@@ -566,22 +662,17 @@ export default function Home() {
         onLogout={logout}
         onTogglePlayground={(enabled) => {
           setPlaygroundMode(enabled);
-          // Clear current project when switching modes
-          if (enabled) {
-            const playgroundId = `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-            const emptyProject = createDefaultProject("Playground");
-            emptyProject.id = playgroundId;
-            emptyProject.files = [];
-            setProject(emptyProject);
-            setProjects([emptyProject]);
-          } else {
-            loadProjectsFromAppwrite();
+          if (!enabled) {
+            pruneExpiredPlaygroundProjects();
           }
         }}
       />
       <LoginDialog open={loginDialogOpen} onOpenChange={setLoginDialogOpen} />
       <div className="flex flex-1 min-h-0">
-        <div className="w-64 border-r flex flex-col">
+        <div
+          className="relative border-r flex flex-col"
+          style={{ width: sidebarWidth, minWidth: sidebarMinWidth, maxWidth: sidebarMaxWidth }}
+        >
           <ProjectSidebar
             projectName={project?.name || "Project"}
             files={project?.files || []}
@@ -595,6 +686,10 @@ export default function Home() {
           <div className="border-t p-4">
             <FileUpload onFilesUploaded={handleFilesUploaded} projectId={project?.id} />
           </div>
+          <div
+            className="absolute top-0 right-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/40 transition-colors"
+            onPointerDown={handleSidebarResizeStart}
+          />
         </div>
         <div className="flex-1 grid grid-cols-[1fr_360px] min-h-0">
           <div className="border-r min-h-0">
@@ -612,6 +707,8 @@ export default function Home() {
             <CodeEditor
               path={activeFile?.path}
               value={activeFile?.content ?? ""}
+              encoding={activeFile?.encoding}
+              mimeType={activeFile?.mimeType}
               onChange={handleChangeCode}
               onSave={handleSave}
             />
@@ -626,6 +723,8 @@ export default function Home() {
               projectFiles={project?.files}
               selectedCode={activeFile?.content}
               projectId={project?.id}
+              userId={user?.id}
+              isPlaygroundProject={project?.isPlayground}
             />
           </div>
         </div>

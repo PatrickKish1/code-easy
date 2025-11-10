@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppwriteClient, ProjectFileDoc } from "@/lib/appwrite";
+import { Query } from "node-appwrite";
 
 // Security configuration
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB max file size
@@ -78,10 +79,10 @@ export async function GET(request: NextRequest) {
     // Build queries - filter by projectId and userId
     const queries: string[] = [];
     if (projectId) {
-      queries.push(`equal("projectId", "${projectId}")`);
+      queries.push(Query.equal("projectId", projectId));
     }
     if (userId) {
-      queries.push(`equal("userId", "${userId}")`);
+      queries.push(Query.equal("userId", userId));
     }
     
     const docs = await databases.listDocuments(
@@ -163,9 +164,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "delete") {
-      const queries: string[] = [`equal("projectId", "${projectId}")`];
+      const queries: string[] = [Query.equal("projectId", projectId)];
       if (userId) {
-        queries.push(`equal("userId", "${userId}")`);
+        queries.push(Query.equal("userId", userId));
       }
       const list = await databases.listDocuments(config.databaseId, config.filesCollectionId, queries);
       if (isFolder) {
@@ -199,9 +200,9 @@ export async function POST(request: NextRequest) {
       
       const sanitizedNewPath = sanitizePath(newPath);
       
-      const queries: string[] = [`equal("projectId", "${projectId}")`];
+      const queries: string[] = [Query.equal("projectId", projectId)];
       if (userId) {
-        queries.push(`equal("userId", "${userId}")`);
+        queries.push(Query.equal("userId", userId));
       }
       const list = await databases.listDocuments(config.databaseId, config.filesCollectionId, queries);
       if (isFolder) {
@@ -226,9 +227,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert behavior: if exists, update; else, create
-    const queries: string[] = [`equal("projectId", "${projectId}")`, `equal("path", "${sanitizedPath}")`];
+    const queries: string[] = [
+      Query.equal("projectId", projectId),
+      Query.equal("path", sanitizedPath),
+    ];
     if (userId) {
-      queries.push(`equal("userId", "${userId}")`);
+      queries.push(Query.equal("userId", userId));
     }
     const list = await databases.listDocuments(config.databaseId, config.filesCollectionId, queries);
     const existing = (list.documents || []).find((d: any) => 
