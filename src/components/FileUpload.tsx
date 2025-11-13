@@ -574,51 +574,9 @@ export function FileUpload({ onFilesUploaded, projectId }: FileUploadProps) {
     setUploading(true);
     
     try {
-      // If playground mode, just pass files to callback
-      if (isPlayground || !projectId) {
-        onFilesUploaded(selectedFiles);
-        toast.success(`${selectedFiles.filter((file) => !file.isFolder).length} files staged successfully.`);
-        setUploading(false);
-        return;
-      }
-
-      // For authenticated users, upload to server
-      const formData = new FormData();
-      formData.append("projectId", projectId);
-      if (user?.id) {
-        formData.append("userId", user.id);
-      }
-      formData.append("playground", String(isPlayground));
-
-      selectedFiles.forEach((file) => {
-        if (!file.isFolder) {
-          const filename = file.path.split("/").pop();
-          if (!filename) {
-            return;
-          }
-
-          if (file.encoding === "base64") {
-            formData.append(file.path, base64ToBlob(file.content, file.mimeType), filename);
-          } else {
-            const blob = new Blob([file.content], { type: file.mimeType || "text/plain" });
-            formData.append(file.path, blob, filename);
-          }
-        }
-      });
-
-      const response = await fetch("/api/files/upload", {
-        method: "POST",
-        headers: {
-          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to upload files");
-      }
-
-      onFilesUploaded(selectedFiles);
+      // Always pass files to callback - the page component will handle database uploads
+      // for both playground and authenticated projects
+      await onFilesUploaded(selectedFiles);
       toast.success(`${selectedFiles.filter((file) => !file.isFolder).length} files uploaded successfully.`);
     } catch (error) {
       console.error("Error uploading files:", error);
@@ -627,7 +585,7 @@ export function FileUpload({ onFilesUploaded, projectId }: FileUploadProps) {
       setUploading(false);
     }
   },
-  [onFilesUploaded, projectId, user, isPlayground, sessionToken]);
+  [onFilesUploaded]);
 
   const handleFetchBranches = useCallback(async () => {
     if (!githubUrl.trim()) {

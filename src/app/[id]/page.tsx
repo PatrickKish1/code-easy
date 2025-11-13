@@ -53,25 +53,16 @@ export default function ProjectPage() {
     window.localStorage.setItem(sidebarWidthPrefKey, String(sidebarWidth));
   }, [sidebarWidth]);
 
+  // Initialize playground project from database or create new one
   useEffect(() => {
-    if (!isPlayground) {
+    if (!isPlayground || projectId) {
+      // If we have a projectId, the effect above will handle loading it
       return;
     }
 
-    const stored = readPlaygroundProjects();
-    const normalized = stored.map((proj) => ({
-      ...proj,
-      files: proj.files || [],
-      openFilePaths: proj.openFilePaths || [],
-      dirtyFiles: proj.dirtyFiles || [],
-      isPlayground: true,
-    }));
-
-    if (normalized.length === 0) {
-      const baseId =
-        projectId && projectId.startsWith("playground-")
-          ? projectId
-          : `playground-${generateUuid()}`;
+    // No projectId specified - create a new playground project
+    const initializeNewPlayground = async () => {
+      const baseId = `playground-${generateUuid()}`;
       const fresh = createDefaultProject("Playground");
       const seeded: Project = {
         ...fresh,
@@ -84,33 +75,30 @@ export default function ProjectPage() {
         updatedAt: Date.now(),
         expiresAt: Date.now() + PLAYGROUND_TTL,
       };
+      
+      // Create project in database
+      try {
+        await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: baseId,
+            name: seeded.name,
+            isPlayground: true,
+            expiresAt: seeded.expiresAt,
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to create playground project in database:", error);
+      }
+      
       writePlaygroundProjects([seeded]);
       setProjects([seeded]);
       setProject(seeded);
-      if (projectId !== baseId) {
-        router.replace(`/${baseId}`);
-      }
-      return;
-    }
-
-    const sorted = [...normalized].sort((a, b) => b.updatedAt - a.updatedAt);
-    const targetId =
-      projectId && projectId.startsWith("playground-") ? projectId : sorted[0].id;
-    const target = sorted.find((proj) => proj.id === targetId) || sorted[0];
-
-    setProjects(sorted);
-    setProject(target);
-    writePlaygroundProjects(
-      sorted.map((proj) => ({
-        ...proj,
-        isPlayground: true,
-        expiresAt: proj.expiresAt ?? Date.now() + PLAYGROUND_TTL,
-      })),
-    );
-
-    if (target && projectId !== target.id) {
-      router.replace(`/${target.id}`);
-    }
+      router.replace(`/${baseId}`);
+    };
+    
+    initializeNewPlayground();
   }, [isPlayground, projectId, router]);
 
   const handleSidebarResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -138,14 +126,9 @@ export default function ProjectPage() {
   }, [sidebarWidth, sidebarMinWidth, sidebarMaxWidth]);
 
   const loadProjectFiles = useCallback(async (projectId: string): Promise<Project["files"]> => {
-    if (isPlayground) {
-      return [];
-    }
-
     try {
-      const url = user?.id
-        ? `/api/files?projectId=${projectId}&userId=${encodeURIComponent(user.id)}`
-        : `/api/files?projectId=${projectId}`;
+      // Load files from database for both playground and authenticated projects
+      const url = `/api/files?projectId=${projectId}${user?.id ? `&userId=${encodeURIComponent(user.id)}` : ''}`;
       const response = await fetch(url, {
         headers: {
           ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
@@ -159,7 +142,7 @@ export default function ProjectPage() {
           .map((f: any) => ({
             path: f.path,
             content: f.content || "",
-            encoding: f.encoding,
+            encoding: f.encoding || "text",
             mimeType: f.mimeType,
           }));
       }
@@ -168,7 +151,7 @@ export default function ProjectPage() {
       console.error("Failed to load files from Appwrite:", error);
       return [];
     }
-  }, [user?.id, sessionToken, isPlayground]);
+  }, [user?.id, sessionToken]);
 
   const loadProjectsFromAppwrite = useCallback(async () => {
     // Don't load from server in playground mode
@@ -230,12 +213,112 @@ export default function ProjectPage() {
     }
   }, [user?.id, sessionToken, isPlayground, projectId, router, loadProjectFiles]);
 
-  // Load projects from Appwrite when auth state changes
+  // Load projects from Appwrite when auth state changes (only for authenticated users)
   useEffect(() => {
-    if (!authLoading) {
+    if (!authLoading && !isPlayground) {
       loadProjectsFromAppwrite();
     }
-  }, [authLoading, loadProjectsFromAppwrite]);
+  }, [authLoading, isPlayground, loadProjectsFromAppwrite]);
+  
+  // For playground projects, load from database if projectId exists
+  useEffect(() => {
+    if (!isPlayground || !projectId) return;
+    
+    const loadPlaygroundProject = async () => {
+      try {
+        // First check if project exists in database
+        const projectResponse = await fetch(`/api/projects?projectId=${projectId}`);
+        const projectData = await projectResponse.json();
+        
+        if (projectData.project) {
+          // Project exists in database, load files
+          const files = await loadProjectFiles(projectId);
+          const projectWithFiles = {
+            ...projectData.project,
+            files,
+            isPlayground: true,
+          };
+          setProject(projectWithFiles);
+          setProjects([projectWithFiles]);
+        } else {
+          // Project doesn't exist in database yet, use localStorage version
+          const stored = readPlaygroundProjects();
+          const target = stored.find(p => p.id === projectId);
+          if (target) {
+            // Create project in database first
+            try {
+              await fetch("/api/projects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: target.id,
+                  name: target.name,
+                  isPlayground: true,
+                  expiresAt: target.expiresAt || Date.now() + PLAYGROUND_TTL,
+                }),
+              });
+              
+              // If target has files, upload them to database
+              if (target.files && target.files.length > 0) {
+                const formData = new FormData();
+                formData.append("projectId", target.id);
+                formData.append("playground", "true");
+                
+                target.files.forEach((file) => {
+                  if (file.encoding === "base64") {
+                    const byteCharacters = atob(file.content);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                      byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], { type: file.mimeType || "application/octet-stream" });
+                    const filename = file.path.split("/").pop() || "file";
+                    formData.append(file.path, blob, filename);
+                  } else {
+                    const blob = new Blob([file.content], { type: file.mimeType || "text/plain" });
+                    const filename = file.path.split("/").pop() || "file";
+                    formData.append(file.path, blob, filename);
+                  }
+                });
+                
+                await fetch("/api/files/upload", {
+                  method: "POST",
+                  body: formData,
+                });
+              }
+              
+              // Load files from database after upload
+              const files = await loadProjectFiles(target.id);
+              const projectWithFiles = {
+                ...target,
+                files,
+                isPlayground: true,
+              };
+              setProject(projectWithFiles);
+              setProjects([projectWithFiles]);
+            } catch (error) {
+              console.error("Failed to create project in database:", error);
+              // Fallback to localStorage version
+              setProject(target);
+              setProjects([target]);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load playground project:", error);
+        // Fallback to localStorage
+        const stored = readPlaygroundProjects();
+        const target = stored.find(p => p.id === projectId);
+        if (target) {
+          setProject(target);
+          setProjects([target]);
+        }
+      }
+    };
+    
+    loadPlaygroundProject();
+  }, [isPlayground, projectId, loadProjectFiles]);
 
   // Load specific project when projectId changes
   useEffect(() => {
@@ -626,13 +709,20 @@ export default function ProjectPage() {
     
     console.log("Executing code action:", action);
     
-    switch (action.type) {
-      case "create":
-        if (action.content) {
-          console.log("Creating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
-          const next = upsertFile(project, action.path, action.content, "text");
-          persist({ ...next, activeFilePath: action.path });
-          if (!isPlayground && user?.id) {
+    const isPlaygroundProject = project.id.startsWith("playground-") || project.isPlayground;
+    
+    // Handle multiple actions if action is an array
+    const actions = Array.isArray(action) ? action : [action];
+    
+    for (const act of actions) {
+      switch (act.type) {
+        case "create":
+          if (act.content) {
+            console.log("Creating file:", act.path, "with content:", act.content.substring(0, 100) + "...");
+            const next = upsertFile(project, act.path, act.content, "text");
+            persist({ ...next, activeFilePath: act.path });
+            
+            // Save to database for both playground and authenticated projects
             try {
               await fetch("/api/files", { 
                 method: "POST", 
@@ -642,27 +732,31 @@ export default function ProjectPage() {
                 }, 
                 body: JSON.stringify({ 
                   action: "create", 
-                  path: action.path, 
-                  content: action.content, 
+                  path: act.path, 
+                  content: act.content, 
                   projectId: project.id,
-                  userId: user.id,
+                  ...(user?.id && !isPlaygroundProject ? { userId: user.id } : {}),
                 }) 
               });
+              // Reload files from database to ensure sync
+              const loadedFiles = await loadProjectFiles(project.id);
+              const updatedProject = { ...project, files: loadedFiles };
+              setProject(updatedProject);
             } catch (error) {
-              console.error("Failed to persist file to Appwrite:", error);
+              console.error("Failed to persist file to database:", error);
             }
+          } else {
+            console.log("No content provided for create action");
           }
-        } else {
-          console.log("No content provided for create action");
-        }
-        break;
-      case "update":
-        if (action.content) {
-          console.log("Updating file:", action.path, "with content:", action.content.substring(0, 100) + "...");
-          const existing = project.files.find((f) => f.path === action.path);
-          const next = upsertFile(project, action.path, action.content, existing?.encoding ?? "text", existing?.mimeType);
-          persist(next);
-          if (!isPlayground && user?.id) {
+          break;
+        case "update":
+          if (act.content) {
+            console.log("Updating file:", act.path, "with content:", act.content.substring(0, 100) + "...");
+            const existing = project.files.find((f) => f.path === act.path);
+            const next = upsertFile(project, act.path, act.content, existing?.encoding ?? "text", existing?.mimeType);
+            persist(next);
+            
+            // Save to database for both playground and authenticated projects
             try {
               await fetch("/api/files", { 
                 method: "POST", 
@@ -672,25 +766,31 @@ export default function ProjectPage() {
                 }, 
                 body: JSON.stringify({ 
                   action: "update", 
-                  path: action.path, 
-                  content: action.content, 
+                  path: act.path, 
+                  content: act.content, 
                   projectId: project.id,
-                  userId: user.id,
+                  encoding: existing?.encoding,
+                  mimeType: existing?.mimeType,
+                  ...(user?.id && !isPlaygroundProject ? { userId: user.id } : {}),
                 }) 
               });
+              // Reload files from database to ensure sync
+              const loadedFiles = await loadProjectFiles(project.id);
+              const updatedProject = { ...project, files: loadedFiles };
+              setProject(updatedProject);
             } catch (error) {
-              console.error("Failed to persist file to Appwrite:", error);
+              console.error("Failed to persist file to database:", error);
             }
+          } else {
+            console.log("No content provided for update action");
           }
-        } else {
-          console.log("No content provided for update action");
-        }
-        break;
-      case "delete":
-        console.log("Deleting file:", action.path);
-        const next = deleteProjectFile(project, action.path);
-        persist(next);
-        if (!isPlayground && user?.id) {
+          break;
+        case "delete":
+          console.log("Deleting file:", act.path);
+          const next = deleteProjectFile(project, act.path);
+          persist(next);
+          
+          // Delete from database for both playground and authenticated projects
           try {
             await fetch("/api/files", { 
               method: "POST", 
@@ -700,41 +800,157 @@ export default function ProjectPage() {
               }, 
               body: JSON.stringify({ 
                 action: "delete", 
-                path: action.path, 
+                path: act.path, 
                 projectId: project.id,
-                userId: user.id,
+                ...(user?.id && !isPlaygroundProject ? { userId: user.id } : {}),
               }) 
             });
+            // Reload files from database to ensure sync
+            const loadedFiles = await loadProjectFiles(project.id);
+            const updatedProject = { ...project, files: loadedFiles };
+            setProject(updatedProject);
           } catch (error) {
-            console.error("Failed to delete file from Appwrite:", error);
+            console.error("Failed to delete file from database:", error);
           }
-        }
-        break;
+          break;
+      }
     }
   }
 
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   const handleFilesUploaded = useCallback(
-    (files: Array<{ path: string; content: string; isFolder: boolean; encoding?: "text" | "base64"; mimeType?: string }>) => {
+    async (files: Array<{ path: string; content: string; isFolder: boolean; encoding?: "text" | "base64"; mimeType?: string }>) => {
     if (!project) return;
     
-    // Add folders first
-    const folders = files.filter(f => f.isFolder);
-    let updated = project;
-    folders.forEach(f => {
-      updated = createFolder(updated, f.path);
-    });
+    // Ensure project exists in database (for playground projects)
+    const isPlaygroundProject = project.id.startsWith("playground-") || project.isPlayground;
     
-    // Then add files
-    files
-      .filter(f => !f.isFolder)
-      .forEach(f => {
-        updated = upsertFile(updated, f.path, f.content, f.encoding, f.mimeType);
+    try {
+      // First, ensure the project exists in the database
+      if (isPlaygroundProject) {
+        await fetch("/api/projects", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          },
+          body: JSON.stringify({
+            id: project.id,
+            name: project.name,
+            isPlayground: true,
+            expiresAt: project.expiresAt || Date.now() + PLAYGROUND_TTL,
+          }),
+        });
+      }
+      
+      // Upload files to database for both playground and authenticated projects
+      // For playground projects, we'll use FormData to upload files
+      if (isPlaygroundProject) {
+        const formData = new FormData();
+        formData.append("projectId", project.id);
+        formData.append("playground", "true");
+        
+        files
+          .filter(f => !f.isFolder)
+          .forEach((f) => {
+            const filename = f.path.split("/").pop();
+            if (!filename) return;
+            
+            if (f.encoding === "base64") {
+              // Convert base64 to blob
+              const byteCharacters = atob(f.content);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const blob = new Blob([byteArray], { type: f.mimeType || "application/octet-stream" });
+              formData.append(f.path, blob, filename);
+            } else {
+              const blob = new Blob([f.content], { type: f.mimeType || "text/plain" });
+              formData.append(f.path, blob, filename);
+            }
+          });
+        
+        await fetch("/api/files/upload", {
+          method: "POST",
+          headers: {
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          },
+          body: formData,
+        });
+      } else if (user?.id) {
+        // For authenticated users, upload files
+        const formData = new FormData();
+        formData.append("projectId", project.id);
+        formData.append("userId", user.id);
+        formData.append("playground", "false");
+        
+        files
+          .filter(f => !f.isFolder)
+          .forEach((f) => {
+            const filename = f.path.split("/").pop();
+            if (!filename) return;
+            
+            if (f.encoding === "base64") {
+              const byteCharacters = atob(f.content);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const blob = new Blob([byteArray], { type: f.mimeType || "application/octet-stream" });
+              formData.append(f.path, blob, filename);
+            } else {
+              const blob = new Blob([f.content], { type: f.mimeType || "text/plain" });
+              formData.append(f.path, blob, filename);
+            }
+          });
+        
+        await fetch("/api/files/upload", {
+          method: "POST",
+          headers: {
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          },
+          body: formData,
+        });
+      }
+      
+      // Update local state
+      const folders = files.filter(f => f.isFolder);
+      let updated = project;
+      folders.forEach(f => {
+        updated = createFolder(updated, f.path);
       });
-    
-    persist(updated);
-  }, [project, persist]);
+      
+      files
+        .filter(f => !f.isFolder)
+        .forEach(f => {
+          updated = upsertFile(updated, f.path, f.content, f.encoding, f.mimeType);
+        });
+      
+      // Reload files from database to ensure sync
+      const loadedFiles = await loadProjectFiles(project.id);
+      updated = { ...updated, files: loadedFiles };
+      
+      persist(updated);
+    } catch (error) {
+      console.error("Failed to upload files to database:", error);
+      // Still update local state even if database upload fails
+      const folders = files.filter(f => f.isFolder);
+      let updated = project;
+      folders.forEach(f => {
+        updated = createFolder(updated, f.path);
+      });
+      files
+        .filter(f => !f.isFolder)
+        .forEach(f => {
+          updated = upsertFile(updated, f.path, f.content, f.encoding, f.mimeType);
+        });
+      persist(updated);
+    }
+  }, [project, persist, sessionToken, user?.id, loadProjectFiles]);
 
   if (authLoading) {
     return (

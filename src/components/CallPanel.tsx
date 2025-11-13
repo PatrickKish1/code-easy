@@ -414,43 +414,19 @@ export function CallPanel({
       // Get project files or read a specific file
       getProjectFiles: async ({ path }: { path?: string }): Promise<any> => {
         try {
-          if (isLocalProject) {
-            const files = projectFiles || [];
-            if (path) {
-              const file = files.find((f) => f.path === path);
-              if (file) {
-                return {
-                  success: true,
-                  files: [file],
-                  content: file.content,
-                  path: file.path,
-                };
-              }
-              return {
-                success: false,
-                message: `File ${path} not found`,
-              };
-            }
-
-            return {
-              success: true,
-              files,
-              count: files.length,
-            };
-          }
-
           if (!projectId) {
             throw new Error('Project ID is required');
           }
 
-          const url = `/api/files?projectId=${encodeURIComponent(projectId)}${userId ? `&userId=${encodeURIComponent(userId)}` : ''}${path ? `&path=${encodeURIComponent(path)}` : ''}`;
+          // For both playground and authenticated projects, fetch from database
+          const url = `/api/files?projectId=${encodeURIComponent(projectId)}${userId && !isLocalProject ? `&userId=${encodeURIComponent(userId)}` : ''}${path ? `&path=${encodeURIComponent(path)}` : ''}`;
           const response = await fetch(url, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
           });
 
           if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || `Failed to get files: ${response.statusText}`);
           }
 
@@ -458,7 +434,7 @@ export function CallPanel({
           
           // If a specific path was requested, return just that file
           if (path) {
-            const file = data.files?.find((f: any) => f.path === path);
+            const file = data.files?.find((f: any) => f.path === path && !f.isFolder);
             if (file) {
               return {
                 success: true,
@@ -473,14 +449,35 @@ export function CallPanel({
             };
           }
 
-          // Return all files
+          // Return all files (filter out folders)
+          const files = (data.files || []).filter((f: any) => !f.isFolder);
           return {
             success: true,
-            files: data.files || [],
-            count: data.files?.length || 0,
+            files,
+            count: files.length,
           };
         } catch (error) {
           console.error('Error getting project files:', error);
+          // Fallback to in-memory files if database fetch fails
+          if (isLocalProject && projectFiles) {
+            const files = projectFiles || [];
+            if (path) {
+              const file = files.find((f) => f.path === path);
+              if (file) {
+                return {
+                  success: true,
+                  files: [file],
+                  content: file.content,
+                  path: file.path,
+                };
+              }
+            }
+            return {
+              success: true,
+              files,
+              count: files.length,
+            };
+          }
           return {
             success: false,
             message: error instanceof Error ? error.message : 'Failed to get project files',

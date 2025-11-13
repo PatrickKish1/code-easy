@@ -12,7 +12,10 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   title: "VibeCoder",
-  description: "VibeCoder is a modern, AI-powered integrated development environment built with Next.js, featuring real-time voice conversations, intelligent code generation, and a Cursor-like experience.",
+  description: "VibeCoder is a modern, AI-powered integrated development environment built with Next.js, featuring real-time voice conversations, intelligent code generation, and a new development experience.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

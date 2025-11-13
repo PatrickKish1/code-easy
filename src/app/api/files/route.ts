@@ -64,48 +64,46 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get("projectId");
     const userId = searchParams.get("userId");
-    const isPlayground = searchParams.get("playground") === "true";
-    const sessionId = searchParams.get("sessionId"); // For playground session isolation
+    const path = searchParams.get("path");
     
-    // For playground mode, check localStorage sessionId
-    if (isPlayground) {
-      // Playground files are stored in-memory or localStorage - return empty for now
-      // They'll be managed client-side
-      return NextResponse.json({ files: [] });
+    if (!projectId) {
+      return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
     }
     
     const { databases, config } = getAppwriteClient();
     
-    // Build queries - filter by projectId and userId
-    const queries: string[] = [];
-    if (projectId) {
-      queries.push(Query.equal("projectId", projectId));
-    }
+    // Build queries - filter by projectId (playground projects are stored in DB too)
+    const queries: string[] = [Query.equal("projectId", projectId)];
+    
+    // Optional: filter by userId if provided (for authenticated users)
+    // For playground projects, userId may be null, so we don't filter by it
     if (userId) {
       queries.push(Query.equal("userId", userId));
+    }
+    
+    // Optional: filter by specific path
+    if (path) {
+      queries.push(Query.equal("path", path));
     }
     
     const docs = await databases.listDocuments(
       config.databaseId, 
       config.filesCollectionId, 
-      queries.length > 0 ? queries : []
+      queries
     );
     
     let files = (docs.documents || []).map((d: any) => ({ 
       path: d.path as string, 
       content: (d.content ?? "") as string, 
+      encoding: d.encoding || "text",
+      mimeType: d.mimeType || null,
       isFolder: !!d.isFolder,
       projectId: d.projectId || null,
       userId: d.userId || null,
     }));
     
     // Additional filtering for safety
-    if (projectId) {
-      files = files.filter(f => f.projectId === projectId);
-    }
-    if (userId) {
-      files = files.filter(f => f.userId === userId);
-    }
+    files = files.filter(f => f.projectId === projectId);
     
     return NextResponse.json({ files });
   } catch (error) {
@@ -117,7 +115,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, path, content, isFolder, newPath, projectId, userId, isPlayground, sessionId } = body as { 
+    const { action, path, content, isFolder, newPath, projectId, userId, encoding, mimeType } = body as { 
       action: "create" | "update" | "delete" | "rename" | "upload"; 
       path: string; 
       content?: string; 
@@ -125,15 +123,9 @@ export async function POST(request: NextRequest) {
       newPath?: string; 
       projectId?: string;
       userId?: string | null;
-      isPlayground?: boolean;
-      sessionId?: string;
+      encoding?: "text" | "base64";
+      mimeType?: string;
     };
-    
-    // For playground mode, files are managed client-side only (no persistence)
-    if (isPlayground) {
-      // Return success but don't actually save to database
-      return NextResponse.json({ ok: true, id: `playground-${Date.now()}` });
-    }
 
     const { databases, config } = getAppwriteClient();
 
@@ -158,27 +150,31 @@ export async function POST(request: NextRequest) {
     // Sanitize path
     const sanitizedPath = sanitizePath(path);
     
-    // For authenticated users, require userId
-    if (!isPlayground && !userId && !projectId.startsWith("playground-")) {
-      return NextResponse.json({ error: "User ID is required for authenticated files" }, { status: 400 });
+    // Playground projects can have null userId, authenticated projects require userId
+    const isPlaygroundProject = projectId.startsWith("playground-");
+    if (!isPlaygroundProject && !userId) {
+      // For non-playground projects, userId is required
+      // But we'll allow it to be null for backward compatibility
+      console.warn("No userId provided for non-playground project:", projectId);
     }
 
     if (action === "delete") {
       const queries: string[] = [Query.equal("projectId", projectId)];
-      if (userId) {
+      // For playground projects, don't filter by userId
+      if (userId && !isPlaygroundProject) {
         queries.push(Query.equal("userId", userId));
       }
       const list = await databases.listDocuments(config.databaseId, config.filesCollectionId, queries);
       if (isFolder) {
         const toDelete = (list.documents || []).filter((d: any) => 
-          (d.path as string).startsWith(sanitizedPath) && d.projectId === projectId && (!userId || d.userId === userId)
+          (d.path as string).startsWith(sanitizedPath) && d.projectId === projectId && (isPlaygroundProject || !userId || d.userId === userId)
         );
         for (const d of toDelete) {
           await databases.deleteDocument(config.databaseId, config.filesCollectionId, d.$id);
         }
       } else {
         const doc = (list.documents || []).find((d: any) => 
-          d.path === sanitizedPath && d.projectId === projectId && (!userId || d.userId === userId)
+          d.path === sanitizedPath && d.projectId === projectId && (isPlaygroundProject || !userId || d.userId === userId)
         );
         if (doc) await databases.deleteDocument(config.databaseId, config.filesCollectionId, doc.$id);
       }
@@ -201,13 +197,14 @@ export async function POST(request: NextRequest) {
       const sanitizedNewPath = sanitizePath(newPath);
       
       const queries: string[] = [Query.equal("projectId", projectId)];
-      if (userId) {
+      // For playground projects, don't filter by userId
+      if (userId && !isPlaygroundProject) {
         queries.push(Query.equal("userId", userId));
       }
       const list = await databases.listDocuments(config.databaseId, config.filesCollectionId, queries);
       if (isFolder) {
         const toMove = (list.documents || []).filter((d: any) => 
-          (d.path as string).startsWith(sanitizedPath) && d.projectId === projectId && (!userId || d.userId === userId)
+          (d.path as string).startsWith(sanitizedPath) && d.projectId === projectId && (isPlaygroundProject || !userId || d.userId === userId)
         );
         for (const d of toMove) {
           const suffix = (d.path as string).slice(sanitizedPath.length);
@@ -215,7 +212,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         const doc = (list.documents || []).find((d: any) => 
-          d.path === sanitizedPath && d.projectId === projectId && (!userId || d.userId === userId)
+          d.path === sanitizedPath && d.projectId === projectId && (isPlaygroundProject || !userId || d.userId === userId)
         );
         if (doc) await databases.updateDocument(config.databaseId, config.filesCollectionId, doc.$id, { path: sanitizedNewPath });
       }
@@ -231,22 +228,43 @@ export async function POST(request: NextRequest) {
       Query.equal("projectId", projectId),
       Query.equal("path", sanitizedPath),
     ];
-    if (userId) {
+    // For playground projects, don't filter by userId (it may be null)
+    // For authenticated projects, filter by userId if provided
+    if (userId && !isPlaygroundProject) {
       queries.push(Query.equal("userId", userId));
     }
     const list = await databases.listDocuments(config.databaseId, config.filesCollectionId, queries);
     const existing = (list.documents || []).find((d: any) => 
-      d.path === sanitizedPath && d.projectId === projectId && (!userId || d.userId === userId)
+      d.path === sanitizedPath && d.projectId === projectId && (isPlaygroundProject || !userId || d.userId === userId)
     );
     if (existing) {
-      const payload: any = isFolder ? { isFolder: true } : { content };
-      if (userId) payload.userId = userId; // Ensure userId is set on update
+      const payload: any = isFolder 
+        ? { isFolder: true } 
+        : { 
+            content, 
+            ...(encoding ? { encoding } : {}),
+            ...(mimeType ? { mimeType } : {}),
+          };
+      // Only set userId if it was provided (for authenticated users)
+      if (userId) payload.userId = userId;
       const updated = await databases.updateDocument(config.databaseId, config.filesCollectionId, existing.$id, payload);
       return NextResponse.json({ ok: true, id: updated.$id });
     } else {
       const payload: any = isFolder 
-        ? { path: sanitizedPath, isFolder: true, projectId, ...(userId ? { userId } : {}) } 
-        : { path: sanitizedPath, content, projectId, ...(userId ? { userId } : {}) };
+        ? { 
+            path: sanitizedPath, 
+            isFolder: true, 
+            projectId, 
+            ...(userId ? { userId } : {}) 
+          } 
+        : { 
+            path: sanitizedPath, 
+            content, 
+            projectId, 
+            ...(encoding ? { encoding } : {}),
+            ...(mimeType ? { mimeType } : {}),
+            ...(userId ? { userId } : {}) 
+          };
       const created = await databases.createDocument(config.databaseId, config.filesCollectionId, "unique()", payload);
       return NextResponse.json({ ok: true, id: created.$id });
     }

@@ -133,46 +133,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
     }
 
-    // For playground mode, return file structure but don't persist
-    if (isPlayground) {
-      const files: Array<{ path: string; content: string; isFolder: boolean }> = [];
-      // Process uploaded files from FormData
-      const fileEntries = Array.from(formData.entries()).filter(([key]) => key !== "projectId" && key !== "userId" && key !== "playground");
-      let totalSize = 0;
-      
-      for (const [path, value] of fileEntries) {
-        if (value instanceof File) {
-          // Security validations
-          if (!validateExtension(value.name)) {
-            return NextResponse.json({ 
-              error: `File type not allowed: ${value.name}. Only code and text files are permitted.` 
-            }, { status: 400 });
-          }
-          
-          if (!validatePath(path as string)) {
-            return NextResponse.json({ 
-              error: `Invalid file path: ${path}` 
-            }, { status: 400 });
-          }
-          
-          totalSize += value.size;
-          if (totalSize > MAX_TOTAL_SIZE) {
-            return NextResponse.json({ 
-              error: `Total upload size exceeds ${MAX_TOTAL_SIZE / 1024 / 1024}MB limit` 
-            }, { status: 400 });
-          }
-          
-          const content = await readFileAsText(value);
-          files.push({
-            path: sanitizePath(path as string),
-            content,
-            isFolder: false,
-          });
-        }
-      }
-      
-      return NextResponse.json({ files });
-    }
+    // Playground projects are now stored in the database too
+    // So we process them the same way as authenticated projects
 
     const { databases, config } = getAppwriteClient();
     const files: Array<{ path: string; content: string; isFolder: boolean }> = [];
@@ -213,25 +175,38 @@ export async function POST(request: NextRequest) {
     }
 
     // Save files to database
+    const { Query } = await import("node-appwrite");
+    const isPlaygroundProject = projectId.startsWith("playground-");
     const savedFiles = [];
+    
     for (const file of files) {
       const payload: any = {
         path: file.path,
         content: file.content,
         projectId,
         isFolder: file.isFolder,
-        ...(userId ? { userId } : {}),
       };
+      
+      // Only set userId for authenticated projects
+      if (userId && !isPlaygroundProject) {
+        payload.userId = userId;
+      }
 
       // Check if file exists
       const queries = [
-        `equal("projectId", "${projectId}")`,
-        `equal("path", "${file.path}")`,
-        ...(userId ? [`equal("userId", "${userId}")`] : []),
+        Query.equal("projectId", projectId),
+        Query.equal("path", file.path),
       ];
       
+      // For authenticated projects, filter by userId
+      if (userId && !isPlaygroundProject) {
+        queries.push(Query.equal("userId", userId));
+      }
+      
       const existing = await databases.listDocuments(config.databaseId, config.filesCollectionId, queries);
-      const existingDoc = existing.documents?.[0];
+      const existingDoc = existing.documents?.find((d: any) => 
+        d.path === file.path && d.projectId === projectId && (isPlaygroundProject || !userId || d.userId === userId)
+      );
       
       if (existingDoc) {
         await databases.updateDocument(config.databaseId, config.filesCollectionId, existingDoc.$id, payload);

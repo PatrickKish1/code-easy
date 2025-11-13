@@ -1,23 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppwriteClient } from "@/lib/appwrite";
+import { Query } from "node-appwrite";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
-    const isPlayground = searchParams.get("playground") === "true";
-    
+    const projectId = searchParams.get("projectId");
     const { databases, config } = getAppwriteClient();
     
-    // For playground mode, don't return any projects (fresh start each time)
-    if (isPlayground) {
-      return NextResponse.json({ projects: [] });
+    // If a specific projectId is requested, fetch that project
+    if (projectId) {
+      try {
+        const doc = await databases.getDocument(config.databaseId, config.projectsCollectionId, projectId);
+        return NextResponse.json({
+          project: {
+            id: doc.$id,
+            name: doc.name,
+            userId: doc.userId || null,
+            createdAt: doc.createdAt,
+            updatedAt: doc.updatedAt,
+            activeFilePath: doc.activeFilePath || null,
+            openFilePaths: doc.openFilePaths || [],
+            dirtyFiles: doc.dirtyFiles || [],
+            isPlayground: projectId.startsWith("playground-"),
+            expiresAt: doc.expiresAt ? parseInt(doc.expiresAt) : undefined,
+          }
+        });
+      } catch (error: any) {
+        // Project not found - return null
+        if (error.code === 404) {
+          return NextResponse.json({ project: null });
+        }
+        throw error;
+      }
     }
     
-    // Build query filters
+    // Build query filters - include playground projects if no userId filter
     const queries: string[] = [];
     if (userId) {
-      queries.push(`equal("userId", "${userId}")`);
+      // For authenticated users, only return their projects
+      queries.push(Query.equal("userId", userId));
+    } else {
+      // For playground mode, return projects with null userId or playground IDs
+      // We'll filter client-side for playground projects
     }
     
     const docs = await databases.listDocuments(
@@ -34,6 +60,8 @@ export async function GET(request: NextRequest) {
       activeFilePath: d.activeFilePath || null,
       openFilePaths: d.openFilePaths || [],
       dirtyFiles: d.dirtyFiles || [],
+      isPlayground: d.$id.startsWith("playground-"),
+      expiresAt: d.expiresAt ? parseInt(d.expiresAt) : undefined,
     }));
     return NextResponse.json({ projects });
   } catch (error) {
@@ -45,66 +73,100 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, id, userId, isPlayground } = body as { name: string; id?: string; userId?: string | null; isPlayground?: boolean };
+    const { name, id, userId, isPlayground, expiresAt } = body as { 
+      name: string; 
+      id?: string; 
+      userId?: string | null; 
+      isPlayground?: boolean;
+      expiresAt?: number;
+    };
     
     if (!name) {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
     }
 
-    // For playground mode, generate a session-based project ID that won't persist
-    if (isPlayground) {
-      const playgroundId = `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      return NextResponse.json({ 
-        project: {
-          id: playgroundId,
-          name,
-          userId: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          activeFilePath: null,
-          openFilePaths: [],
-          dirtyFiles: [],
-          isPlayground: true,
-        }
-      });
-    }
-
-    // Authenticated users must provide userId
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required for authenticated projects" }, { status: 400 });
-    }
-
     const { databases, config } = getAppwriteClient();
     
-    const projectData = {
+    // Determine if this is a playground project
+    const projectId = id || `playground-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const isPlaygroundProject = isPlayground || projectId.startsWith("playground-");
+    
+    // For playground projects, set expiresAt to 24 hours from now if not provided
+    const projectExpiresAt = isPlaygroundProject 
+      ? (expiresAt || Date.now() + 24 * 60 * 60 * 1000)
+      : undefined;
+    
+    const projectData: any = {
       name,
-      userId, // Bind project to user
+      userId: isPlaygroundProject ? null : userId, // Playground projects have null userId
       activeFilePath: null,
       openFilePaths: [],
       dirtyFiles: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    
+    // Add expiresAt for playground projects
+    if (isPlaygroundProject && projectExpiresAt) {
+      projectData.expiresAt = projectExpiresAt.toString();
+    }
 
-    const created = await databases.createDocument(
-      config.databaseId, 
-      config.projectsCollectionId, 
-      id || "unique()", 
-      projectData
-    );
+    // For playground projects, use the provided ID (they're client-generated)
+    // For authenticated projects, let Appwrite generate the ID
+    const documentId = isPlaygroundProject ? projectId : (id || "unique()");
+    
+    try {
+      const created = await databases.createDocument(
+        config.databaseId, 
+        config.projectsCollectionId, 
+        documentId, 
+        projectData
+      );
 
-    return NextResponse.json({ 
-      project: {
-        id: created.$id,
-        name: created.name,
-        userId: created.userId,
-        createdAt: created.createdAt,
-        updatedAt: created.updatedAt,
-        activeFilePath: created.activeFilePath,
-        openFilePaths: created.openFilePaths,
-        dirtyFiles: created.dirtyFiles,
+      return NextResponse.json({ 
+        project: {
+          id: created.$id,
+          name: created.name,
+          userId: created.userId || null,
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt,
+          activeFilePath: created.activeFilePath,
+          openFilePaths: created.openFilePaths || [],
+          dirtyFiles: created.dirtyFiles || [],
+          isPlayground: isPlaygroundProject,
+          expiresAt: projectExpiresAt,
+        }
+      });
+    } catch (error: any) {
+      // If document already exists (for playground projects), update it
+      if (error.code === 409 && isPlaygroundProject) {
+        const updated = await databases.updateDocument(
+          config.databaseId,
+          config.projectsCollectionId,
+          documentId,
+          {
+            name: projectData.name,
+            updatedAt: projectData.updatedAt,
+            ...(projectExpiresAt ? { expiresAt: projectExpiresAt.toString() } : {}),
+          }
+        );
+        return NextResponse.json({
+          project: {
+            id: updated.$id,
+            name: updated.name,
+            userId: updated.userId || null,
+            createdAt: updated.createdAt,
+            updatedAt: updated.updatedAt,
+            activeFilePath: updated.activeFilePath,
+            openFilePaths: updated.openFilePaths || [],
+            dirtyFiles: updated.dirtyFiles || [],
+            isPlayground: isPlaygroundProject,
+            expiresAt: projectExpiresAt,
+          }
+        });
       }
-    });
+      throw error;
+    }
   } catch (error) {
     console.error("Failed to create project:", error);
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 });

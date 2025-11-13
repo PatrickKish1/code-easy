@@ -194,18 +194,28 @@ IMPORTANT: Do not call tools or functions. Respond in plain text only.
 
 Key capabilities:
 - Generate new code files
-- Update existing code
+- Update existing code (make targeted changes, not full rewrites)
 - Debug and fix issues
 - Refactor code
 - Explain code
 - Suggest improvements
 
-When generating code:
-1. Always provide complete, working code
-2. Include proper imports and dependencies
-3. Add helpful comments
-4. Follow best practices for the language
-5. Consider the existing codebase context
+**UI COMPONENT LIBRARY:**
+- For all reusable UI components (buttons, inputs, cards, dialogs, etc.), you MUST use shadcn/ui components
+- Import components from "@/components/ui/[component-name]"
+- Common components: Button, Input, Card, Dialog, Popover, Select, Textarea, Avatar, Badge, etc.
+- Use shadcn/ui's design system and patterns - do NOT create custom components when shadcn equivalents exist
+- Follow shadcn/ui's composition patterns and styling conventions
+
+**CRITICAL EDITING GUIDELINES:**
+1. When updating existing files, ALWAYS include the COMPLETE file content with your changes applied
+2. Do NOT rewrite entire files unless the user explicitly asks for a complete rewrite
+3. Make targeted changes: modify only the specific functions, classes, or sections that need updating
+4. Preserve existing code structure, imports, comments, and formatting unless they need to change
+5. When fixing bugs, identify the specific issue and change only what's necessary
+6. Maintain code consistency with the existing codebase style
+7. If the file is large, focus on the specific area that needs changes but still provide the complete file
+8. Always prefer shadcn/ui components over custom UI implementations
 
 For code actions, use this EXACT format:
 \`\`\`action
@@ -219,19 +229,48 @@ DESCRIPTION: Brief description of what this code does
 console.log("Hello World");
 \`\`\`
 
+For UPDATE actions, you MUST provide the COMPLETE file content with your changes applied. Do not provide partial code or diffs.
+
 **CRITICAL:** Always include BOTH the action block AND the code block. The action block tells the system what to do, and the code block contains the actual code to apply.
 
 Current context:`;
 
     if (context?.currentFile) {
       prompt += `\n- Current file: ${context.currentFile}`;
+      
+      // Include current file content if it exists in project files
+      if (context.projectFiles) {
+        const currentFileData = context.projectFiles.find(f => f.path === context.currentFile);
+        if (currentFileData && currentFileData.content) {
+          prompt += `\n\nCurrent file content:\n\`\`\`\n${currentFileData.content}\n\`\`\`\n`;
+          prompt += `\nIMPORTANT: When updating this file, you must provide the COMPLETE file content with your changes applied. Do not provide partial code.`;
+        }
+      }
     }
 
     if (context?.projectFiles && context.projectFiles.length > 0) {
-      prompt += `\n- Project files:\n`;
+      prompt += `\n- Project files (${context.projectFiles.length} total):\n`;
       context.projectFiles.forEach(file => {
-        prompt += `  - ${file.path}\n`;
+        prompt += `  - ${file.path}${file.content ? ` (${file.content.length} chars)` : ''}\n`;
       });
+      
+      // Include relevant file contents for context (limit to avoid token limits)
+      const relevantFiles = context.projectFiles.filter(f => {
+        // Include files that are likely related to the current task
+        if (context.currentFile && f.path === context.currentFile) return true;
+        // Include files mentioned in the prompt or selected code
+        if (context.selectedCode && f.content && f.content.includes(context.selectedCode.substring(0, 50))) return true;
+        return false;
+      }).slice(0, 3); // Limit to 3 files to avoid token limits
+      
+      if (relevantFiles.length > 0) {
+        prompt += `\nRelevant file contents for context:\n`;
+        relevantFiles.forEach(file => {
+          if (file.content && file.content.length < 5000) { // Only include files under 5KB
+            prompt += `\n--- ${file.path} ---\n\`\`\`\n${file.content.substring(0, 2000)}${file.content.length > 2000 ? '\n... (truncated)' : ''}\n\`\`\`\n`;
+          }
+        });
+      }
     }
 
     if (context?.appwriteProjectId) {
@@ -240,6 +279,7 @@ Current context:`;
 
     if (context?.selectedCode) {
       prompt += `\n- Selected code:\n\`\`\`\n${context.selectedCode}\n\`\`\``;
+      prompt += `\nNOTE: The user has selected this code. Make changes to this specific section if updating an existing file.`;
     }
 
     return prompt;

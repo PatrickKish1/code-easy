@@ -96,6 +96,24 @@ export function ChatPanel({ onCodeAction, currentFile, projectFiles, selectedCod
     setIsLoading(true);
 
     try {
+      // Fetch project files from database if projectId is provided
+      let filesContext = projectFiles || [];
+      if (projectId) {
+        try {
+          const filesResponse = await fetch(`/api/files?projectId=${projectId}`);
+          const filesData = await filesResponse.json();
+          if (filesData.files) {
+            filesContext = filesData.files.filter((f: any) => !f.isFolder).map((f: any) => ({
+              path: f.path,
+              content: f.content || "",
+            }));
+          }
+        } catch (error) {
+          console.error("Failed to fetch project files for chat context:", error);
+          // Use provided projectFiles as fallback
+        }
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,7 +122,7 @@ export function ChatPanel({ onCodeAction, currentFile, projectFiles, selectedCod
           prompt: currentInput,
           context: {
             currentFile,
-            projectFiles,
+            projectFiles: filesContext,
             selectedCode,
             appwriteProjectId: projectId,
           },
